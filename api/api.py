@@ -43,15 +43,24 @@ def main():
     add_all_subcards(my_id)
     """
 
+    #"""
     while True:
-        s = input("q = quit or type: subcard_id, delta_amount(use .) ")
+        s = input("q = quit or type: card_id, category_id, delta_amount, description: ")
         if s == "q":
             break
-        sid, delta = s.split()
-        sid = int(sid)
+        rid, tid, delta, desc = s.split()
+        rid = int(rid)
+        tid = int(tid)
         delta = Decimal(delta)
-        ret = delta_money_to_subcard(subcard_id = sid, delta_amount = delta)
+        if delta > 0:
+            ret = inc_money_to_subcard(card_id = rid, category_id = tid, inc_amount = delta, description = desc)
+        elif delta < 0:
+            delta *= -1
+            ret = dec_money_from_subcard(card_id = rid, category_id = tid, dec_amount = delta, description = desc)
+        else:
+            raise Exception("delta_amount == 0")
         print(ret)
+    #"""
 
     """
     id_to_del = my_cards[0][0]
@@ -78,7 +87,9 @@ def print_help():
             add_category,
             get_active_categories_by_owner_id,
             add_subcard,
-            delta_money_to_subcard]
+            get_subcard_by_card_id_and_category_id,
+            inc_money_to_subcard,
+            dec_money_from_subcard]
     for f in func:
         help(f)
         print()
@@ -240,6 +251,16 @@ def get_active_categories_by_owner_id(owner_id):
     categories_rows = db.fetch_all(MY_API_FOLDER + "get_active_categories_by_owner_id.sql", params = {'owner_id': owner_id})
     return categories_rows
 
+def add_all_subcards(owner_id):
+    car = get_active_cards_by_owner_id(owner_id)
+    cat = get_active_categories_by_owner_id(owner_id)
+    i = 0
+    for r in car:
+        for t in cat:
+            ret = add_subcard(card_id = r[0], category_id = t[0], description = "add_all_subcards_" + str(i) + ": " + r[2] + t[2])
+            print(ret)
+            i += 1
+
 def add_subcard(**kwargs):
     """
     Добавляет субкарту в БД (is_active True, amount 0).
@@ -255,25 +276,48 @@ def add_subcard(**kwargs):
         return None
     # аналогично add_user, подумать про return или другие ошибки
 
-def delta_money_to_subcard(**kwargs):
+def get_subcard_by_card_id_and_category_id(**kwargs):
     """
-    Добавляет (вычитает) деньги на субкарту в БД.
-    Аргументы: subcard_id, delta_amount (именованные).
-    Возвращает строку из БД (кортеж).
+    Получает субкарту из БД.
+    Аргументы: card_id, category_id (именованные).
+    Возвращает строку из БД (кортеж) или None (если субкарты нет в БД).
     """
     db = Database.instance()
-    subcard_row = db.fetch_one_returning(MY_API_FOLDER + "delta_money_to_subcard.sql", params = kwargs)
+    return db.fetch_one(MY_API_FOLDER + "get_subcard_by_card_id_and_category_id.sql", params = kwargs)
+
+def inc_money_to_subcard(**kwargs):
+    """
+    Добавляет деньги на субкарту в БД с занесением в логи.
+    Аргументы: card_id, category_id, inc_amount, description (именованные).
+    Возвращает строку из БД (кортеж) или None (если субкарты нет в БД).
+    """
+    if kwargs["inc_amount"] <= 0:
+        raise ValueError("inc_amount must be positive")
+
+    subcard = get_subcard_by_card_id_and_category_id(**kwargs)
+    if subcard is None:
+        return None
+
+    db = Database.instance()
+    subcard_row = db.fetch_one_returning(MY_API_FOLDER + "inc_money_to_subcard.sql", params = kwargs)
     return subcard_row
 
-def add_all_subcards(owner_id):
-    car = get_active_cards_by_owner_id(owner_id)
-    cat = get_active_categories_by_owner_id(owner_id)
-    i = 0
-    for r in car:
-        for t in cat:
-            ret = add_subcard(card_id = r[0], category_id = t[0], description = "add_all_subcards_" + str(i) + ": " + r[2] + t[2])
-            print(ret)
-            i += 1
+def dec_money_from_subcard(**kwargs):
+    """
+    Вычитает деньги из субкарты в БД с занесением в логи.
+    Аргументы: card_id, category_id, dec_amount, description (именованные).
+    Возвращает строку из БД (кортеж) или None (если субкарты нет в БД).
+    """
+    if kwargs["dec_amount"] <= 0:
+        raise ValueError("dec_amount must be positive")
+
+    subcard = get_subcard_by_card_id_and_category_id(**kwargs)
+    if subcard is None:
+        return None
+
+    db = Database.instance()
+    subcard_row = db.fetch_one_returning(MY_API_FOLDER + "dec_money_from_subcard.sql", params = kwargs)
+    return subcard_row
 
 if __name__ == "__main__":
     main()
