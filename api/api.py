@@ -297,10 +297,12 @@ def inc_money_to_subcard(**kwargs):
     subcard = get_subcard_by_card_id_and_category_id(**kwargs)
     if subcard is None:
         return None
-
-    db = Database.instance()
-    subcard_row = db.fetch_one_returning(MY_API_FOLDER + "inc_money_to_subcard.sql", params = kwargs)
-    return subcard_row
+    try:
+        db = Database.instance()
+        subcard_row = db.fetch_one_returning(MY_API_FOLDER + "inc_money_to_subcard.sql", params = kwargs)
+        return subcard_row
+    except:
+        return None
 
 def dec_money_from_subcard(**kwargs):
     """
@@ -314,10 +316,113 @@ def dec_money_from_subcard(**kwargs):
     subcard = get_subcard_by_card_id_and_category_id(**kwargs)
     if subcard is None:
         return None
+    try:
+        db = Database.instance()
+        subcard_row = db.fetch_one_returning(MY_API_FOLDER + "dec_money_from_subcard.sql", params = kwargs)
+        return subcard_row
+    except:
+        return None
 
+
+def add_template(**kwargs):
+    """
+    Добавляет шаблон в БД.
+    Аргументы: owner_id, percents (по категориям), description.
+    Возвращает строку из БД (кортеж)
+    """
+
+
+def get_templates_by_owner_id(owner_id):
+    """
+    Получает все шаблоны пользователя по owner_id.
+    Возвращает список строк из БД (кортежей) или пустой список.
+    """
+
+
+def delete_template_by_id(id):
+    """
+    Удаляет шаблон по id.
+    Возвращает True, если успех.
+    """
+
+
+def change_template(**kwargs):
+    """
+    Меняет шаблон в БД.
+    Аргументы: id, percents (по категориям), description.
+    Возвращает строку из БД (кортеж)
+    """
+
+
+def change_user(**kwargs):
+    """
+    Меняет пароль и/или имя юзера.
+    Аргументы: id, новые password_hash, password_salt, name (именованные) .
+    Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, логин занят).
+    """
+
+
+def get_inactive_categories_by_owner_id(owner_id):
+    """
+    Получает все неактивные категории пользователя по owner_id.
+    Возвращает список строк из БД (кортежей) или пустой список.
+    """
     db = Database.instance()
-    subcard_row = db.fetch_one_returning(MY_API_FOLDER + "dec_money_from_subcard.sql", params = kwargs)
-    return subcard_row
+    categories_rows = db.fetch_all(MY_API_FOLDER + "get_inactive_categories_by_owner_id.sql", params = {'owner_id': owner_id})
+    return categories_rows
+
+
+def deactivate_category(id):
+    """
+    'Удаляет' категорию по id.
+    Возвращает True, если успех.
+    """
+
+
+def reactivate_category(id):
+    """
+    'Восстанавливает' категорию по id.
+    Возвращает True, если успех.
+    """
+
+
+def change_category(**kwargs):
+    """
+    Меняет имя и/или описание категории.
+    Аргументы: id, новые name (именованные), description.
+    Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, нарушена уникальность).
+    """
+
+
+def change_card(**kwargs):
+    """
+    Меняет имя и/или описание карты.
+    Аргументы: id, новые name (именованные), description.
+    Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, нарушена уникальность).
+    """
+
+
+def deactivate_subcard(id):
+    """
+    'Удаляет' subcard по id.
+    Возвращает True, если успех.
+    """
+
+
+def reactivate_subcard(id):
+    """
+    'Восстанавливает' subcard по id.
+    Возвращает True, если успех.
+    """
+
+
+def transfer_money_between_subcards(**kwargs):
+    """
+    Переводит деньги между сабкартами в БД с занесением в логи.
+    Аргументы: card_id_from, category_id_from, card_id_to, category_id_to, change_amount, description (именованные).
+    Возвращает true/false.
+    """
+
 
 if __name__ == "__main__":
     main()
