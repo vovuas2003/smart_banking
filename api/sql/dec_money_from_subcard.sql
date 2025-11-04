@@ -4,4 +4,4 @@ VALUES (NULL, NULL, %(card_id)s, %(category_id)s, %(dec_amount)s, %(description)
 UPDATE subcard
 SET amount = amount - %(dec_amount)s
 WHERE card_id = %(card_id)s AND category_id = %(category_id)s
-RETURNING id, card_id, category_id, amount, description, is_active;
+RETURNING *;

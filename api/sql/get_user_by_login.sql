@@ -1,3 +1,3 @@
-SELECT id, login, password_hash, password_salt, name
+SELECT *
 FROM "user"
 WHERE login = %(login)s;
