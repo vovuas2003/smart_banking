@@ -58,7 +58,11 @@ def print_help():
             deactivate_subcard_by_id,
             reactivate_subcard_by_id,
             get_active_subcards_by_card_id,
-            transfer_money_between_subcards]
+            transfer_money_between_subcards,
+            get_all_transactions_by_card_id,
+            get_time_bound_transactions_by_card_id,
+            get_all_transactions_by_category_id,
+            get_time_bound_transactions_by_category_id]
     for f in func:
         help(f)
         print()
@@ -334,6 +338,46 @@ def transfer_money_between_subcards(**kwargs):
         raise ValueError("change_amount must be positive")
     db = Database.instance()
     db.execute(MY_API_FOLDER + "transfer_money_between_subcards.sql", params = kwargs)
+
+@try_return_none
+def get_all_transactions_by_card_id(card_id):
+    """
+    Получает все транзакции по карте из логов.
+    Аргумент: card_id.
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    db = Database.instance()
+    return db.fetch_all(MY_API_FOLDER + "get_all_transactions_by_card_id.sql", params = {'card_id': card_id})
+
+@try_return_none
+def get_time_bound_transactions_by_card_id(**kwargs):
+    """
+    Получает транзакции в заданном временном промежутке по карте из логов.
+    Аргументы: card_id, time_from, time_to (именованные).
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    db = Database.instance()
+    return db.fetch_all(MY_API_FOLDER + "get_time_bound_transactions_by_card_id.sql", params = kwargs)
+
+@try_return_none
+def get_all_transactions_by_category_id(category_id):
+    """
+    Получает все транзакции по категории из логов.
+    Аргумент: category_id.
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    db = Database.instance()
+    return db.fetch_all(MY_API_FOLDER + "get_all_transactions_by_category_id.sql", params = {'category_id': category_id})
+
+@try_return_none
+def get_time_bound_transactions_by_category_id(**kwargs):
+    """
+    Получает транзакции в заданном временном промежутке по категории из логов.
+    Аргументы: category_id, time_from, time_to (именованные).
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    db = Database.instance()
+    return db.fetch_all(MY_API_FOLDER + "get_time_bound_transactions_by_category_id.sql", params = kwargs)
 
 if __name__ == "__main__":
     main()
