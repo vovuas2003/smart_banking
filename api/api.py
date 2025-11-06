@@ -22,12 +22,43 @@ def try_return_bool(func):
     return wrapper
 
 MY_API_FOLDER = "sql/"
+ADD_USER = MY_API_FOLDER + "add_user.sql"
+GET_USER_BY_ID = MY_API_FOLDER + "get_user_by_id.sql"
+GET_USER_BY_LOGIN = MY_API_FOLDER + "get_user_by_login.sql"
+ADD_CARD = MY_API_FOLDER + "add_card.sql"
+DELETE_CARD_BY_ID = MY_API_FOLDER + "delete_card_by_id.sql"
+GET_ACTIVE_CARDS_BY_OWNER_ID = MY_API_FOLDER + "get_active_cards_by_owner_id.sql"
+ADD_CATEGORY = MY_API_FOLDER + "add_category.sql"
+GET_ACTIVE_CATEGORIES_BY_OWNER_ID = MY_API_FOLDER + "get_active_categories_by_owner_id.sql"
+ADD_SUBCARD = MY_API_FOLDER + "add_subcard.sql"
+GET_SUBCARD_BY_CARD_ID_AND_CATEGORY_ID = MY_API_FOLDER + "get_subcard_by_card_id_and_category_id.sql"
+INC_MONEY_TO_SUBCARD = MY_API_FOLDER + "inc_money_to_subcard.sql"
+DEC_MONEY_FROM_SUBCARD = MY_API_FOLDER + "dec_money_from_subcard.sql"
+ADD_TEMPLATE = MY_API_FOLDER + "add_template.sql"
+GET_TEMPLATES_BY_OWNER_ID = MY_API_FOLDER + "get_templates_by_owner_id.sql"
+DELETE_TEMPLATE_BY_ID = MY_API_FOLDER + "delete_template_by_id.sql"
+CHANGE_TEMPLATE_BY_ID = MY_API_FOLDER + "change_template_by_id.sql"
+CHANGE_USER_BY_ID = MY_API_FOLDER + "change_user_by_id.sql"
+GET_INACTIVE_CATEGORIES_BY_OWNER_ID = MY_API_FOLDER + "get_inactive_categories_by_owner_id.sql"
+DEACTIVATE_CATEGORY_BY_ID = MY_API_FOLDER + "deactivate_category_by_id.sql"
+REACTIVATE_CATEGORY_BY_ID = MY_API_FOLDER + "reactivate_category_by_id.sql"
+CHANGE_CATEGORY_BY_ID = MY_API_FOLDER + "change_category_by_id.sql"
+CHANGE_CARD_BY_ID = MY_API_FOLDER + "change_card_by_id.sql"
+DEACTIVATE_SUBCARD_BY_ID = MY_API_FOLDER + "deactivate_subcard_by_id.sql"
+REACTIVATE_SUBCARD_BY_ID = MY_API_FOLDER + "reactivate_subcard_by_id.sql"
+GET_ACTIVE_SUBCARDS_BY_CARD_ID = MY_API_FOLDER + "get_active_subcards_by_card_id.sql"
+TRANSFER_MONEY_BETWEEN_SUBCARDS = MY_API_FOLDER + "transfer_money_between_subcards.sql"
+GET_ALL_TRANSACTIONS_BY_CARD_ID = MY_API_FOLDER + "get_all_transactions_by_card_id.sql"
+GET_TIME_BOUND_TRANSACTIONS_BY_CARD_ID = MY_API_FOLDER + "get_time_bound_transactions_by_card_id.sql"
+GET_ALL_TRANSACTIONS_BY_CATEGORY_ID = MY_API_FOLDER + "get_all_transactions_by_category_id.sql"
+GET_TIME_BOUND_TRANSACTIONS_BY_CATEGORY_ID = MY_API_FOLDER + "get_time_bound_transactions_by_category_id.sql"
 
 Database.configure(
     dsn = "postgresql://postgres:postgres@localhost:5432/smart_banking",
     minconn = 1,
     maxconn = 10,
 )
+DB = Database.instance()
 
 def main():
     print_help()
@@ -74,8 +105,7 @@ def add_user(**kwargs):
     Аргументы: login, password_hash, password_salt, name (именованные).
     Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, логин занят).
     """
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "add_user.sql", params = kwargs)
+    return DB.fetch_one_returning(ADD_USER, params = kwargs)
 
 @try_return_none
 def get_user_by_id(user_id):
@@ -84,8 +114,7 @@ def get_user_by_id(user_id):
     Аргумент: user_id.
     Возвращает строку из БД (кортеж) или None, если не найден или ошибка.
     """
-    db = Database.instance()
-    return db.fetch_one(MY_API_FOLDER + "get_user_by_id.sql", params = {'id': user_id})
+    return DB.fetch_one(GET_USER_BY_ID, params = {'id': user_id})
 
 @try_return_none
 def get_user_by_login(login):
@@ -94,8 +123,7 @@ def get_user_by_login(login):
     Аргумент: login.
     Возвращает строку из БД (кортеж) или None, если не найден или ошибка.
     """
-    db = Database.instance()
-    return db.fetch_one(MY_API_FOLDER + "get_user_by_login.sql", params = {'login': login})
+    return DB.fetch_one(GET_USER_BY_LOGIN, params = {'login': login})
 
 @try_return_none
 def add_card(**kwargs):
@@ -104,8 +132,7 @@ def add_card(**kwargs):
     Аргументы: owner_id, name, description (именованные).
     Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, owner_id + name уже заняты).
     """
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "add_card.sql", params = kwargs)
+    return DB.fetch_one_returning(ADD_CARD, params = kwargs)
 
 @try_return_none
 def delete_card_by_id(card_id):
@@ -114,8 +141,7 @@ def delete_card_by_id(card_id):
     Аргумент: card_id.
     Возвращает обновлённую строку из БД (кортеж) или None, если карта не найдена или ошибка.
     """
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "delete_card_by_id.sql", params = {'id': card_id})
+    return DB.fetch_one_returning(DELETE_CARD_BY_ID, params = {'id': card_id})
 
 @try_return_none
 def get_active_cards_by_owner_id(owner_id):
@@ -124,8 +150,7 @@ def get_active_cards_by_owner_id(owner_id):
     Аргумент: owner_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_all(MY_API_FOLDER + "get_active_cards_by_owner_id.sql", params = {'owner_id': owner_id})
+    return DB.fetch_all(GET_ACTIVE_CARDS_BY_OWNER_ID, params = {'owner_id': owner_id})
 
 @try_return_none
 def add_category(**kwargs):
@@ -134,8 +159,7 @@ def add_category(**kwargs):
     Аргументы: owner_id, name, description (именованные).
     Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, owner_id + name уже заняты).
     """
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "add_category.sql", params = kwargs)
+    return DB.fetch_one_returning(ADD_CATEGORY, params = kwargs)
 
 @try_return_none
 def get_active_categories_by_owner_id(owner_id):
@@ -144,8 +168,7 @@ def get_active_categories_by_owner_id(owner_id):
     Аргумент: owner_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_all(MY_API_FOLDER + "get_active_categories_by_owner_id.sql", params = {'owner_id': owner_id})
+    return DB.fetch_all(GET_ACTIVE_CATEGORIES_BY_OWNER_ID, params = {'owner_id': owner_id})
 
 @try_return_none
 def add_subcard(**kwargs):
@@ -154,8 +177,7 @@ def add_subcard(**kwargs):
     Аргументы: card_id, category_id, description (именованные).
     Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, card_id + category_id уже заняты).
     """
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "add_subcard.sql", params = kwargs)
+    return DB.fetch_one_returning(ADD_SUBCARD, params = kwargs)
 
 @try_return_none
 def get_subcard_by_card_id_and_category_id(**kwargs):
@@ -164,8 +186,7 @@ def get_subcard_by_card_id_and_category_id(**kwargs):
     Аргументы: card_id, category_id (именованные).
     Возвращает строку из БД (кортеж) или None (если субкарты нет в БД или ошибка).
     """
-    db = Database.instance()
-    return db.fetch_one(MY_API_FOLDER + "get_subcard_by_card_id_and_category_id.sql", params = kwargs)
+    return DB.fetch_one(GET_SUBCARD_BY_CARD_ID_AND_CATEGORY_ID, params = kwargs)
 
 @try_return_none
 def inc_money_to_subcard(**kwargs):
@@ -179,8 +200,7 @@ def inc_money_to_subcard(**kwargs):
     subcard = get_subcard_by_card_id_and_category_id(**kwargs)
     if subcard is None:
         return None
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "inc_money_to_subcard.sql", params = kwargs)
+    return DB.fetch_one_returning(INC_MONEY_TO_SUBCARD, params = kwargs)
 
 @try_return_none
 def dec_money_from_subcard(**kwargs):
@@ -194,8 +214,7 @@ def dec_money_from_subcard(**kwargs):
     subcard = get_subcard_by_card_id_and_category_id(**kwargs)
     if subcard is None:
         return None
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "dec_money_from_subcard.sql", params = kwargs)
+    return DB.fetch_one_returning(DEC_MONEY_FROM_SUBCARD, params = kwargs)
 
 @try_return_none
 def add_template(**kwargs):
@@ -204,8 +223,7 @@ def add_template(**kwargs):
     Аргументы: owner_id, percents (по категориям), description (именованные).
     Возвращает строку из БД (кортеж) или None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "add_template.sql", params = kwargs)
+    return DB.fetch_one_returning(ADD_TEMPLATE, params = kwargs)
 
 @try_return_none
 def get_templates_by_owner_id(owner_id):
@@ -214,8 +232,7 @@ def get_templates_by_owner_id(owner_id):
     Аргумент: owner_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_all(MY_API_FOLDER + "get_templates_by_owner_id.sql", params = {'owner_id': owner_id})
+    return DB.fetch_all(GET_TEMPLATES_BY_OWNER_ID, params = {'owner_id': owner_id})
 
 @try_return_bool
 def delete_template_by_id(template_id):
@@ -224,8 +241,7 @@ def delete_template_by_id(template_id):
     Аргумент: template_id.
     Возвращает True, если успех, иначе False.
     """
-    db = Database.instance()
-    db.execute(MY_API_FOLDER + "delete_template_by_id.sql", params = {'id': template_id})
+    DB.execute(DELETE_TEMPLATE_BY_ID, params = {'id': template_id})
 
 @try_return_none
 def change_template_by_id(**kwargs):
@@ -234,8 +250,7 @@ def change_template_by_id(**kwargs):
     Аргументы: id, percents (по категориям), description (именованные).
     Возвращает строку из БД (кортеж) или None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "change_template_by_id.sql", params = kwargs)
+    return DB.fetch_one_returning(CHANGE_TEMPLATE_BY_ID, params = kwargs)
 
 @try_return_none
 def change_user_by_id(**kwargs):
@@ -244,8 +259,7 @@ def change_user_by_id(**kwargs):
     Аргументы: id, password_hash, password_salt, name (именованные).
     Возвращает строку из БД (кортеж) при успехе или None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "change_user_by_id.sql", params=kwargs)
+    return DB.fetch_one_returning(CHANGE_USER_BY_ID, params=kwargs)
 
 @try_return_none
 def get_inactive_categories_by_owner_id(owner_id):
@@ -254,8 +268,7 @@ def get_inactive_categories_by_owner_id(owner_id):
     Аргумент: owner_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_all(MY_API_FOLDER + "get_inactive_categories_by_owner_id.sql", params = {'owner_id': owner_id})
+    return DB.fetch_all(GET_INACTIVE_CATEGORIES_BY_OWNER_ID, params = {'owner_id': owner_id})
 
 @try_return_bool
 def deactivate_category_by_id(category_id):
@@ -264,8 +277,7 @@ def deactivate_category_by_id(category_id):
     Аргумент: category_id.
     Возвращает True, если успех, иначе False.
     """
-    db = Database.instance()
-    db.execute(MY_API_FOLDER + "deactivate_category_by_id.sql", params = {'id': category_id})
+    DB.execute(DEACTIVATE_CATEGORY_BY_ID, params = {'id': category_id})
 
 @try_return_bool
 def reactivate_category_by_id(category_id):
@@ -274,8 +286,7 @@ def reactivate_category_by_id(category_id):
     Аргумент: category_id.
     Возвращает True, если успех, иначе False.
     """
-    db = Database.instance()
-    db.execute(MY_API_FOLDER + "reactivate_category_by_id.sql", params = {'id': category_id})
+    DB.execute(REACTIVATE_CATEGORY_BY_ID, params = {'id': category_id})
 
 @try_return_none
 def change_category_by_id(**kwargs):
@@ -284,8 +295,7 @@ def change_category_by_id(**kwargs):
     Аргументы: id, name, description (именованные).
     Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, нарушена уникальность).
     """
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "change_category_by_id.sql", params = kwargs)
+    return DB.fetch_one_returning(CHANGE_CATEGORY_BY_ID", params = kwargs)
 
 @try_return_none
 def change_card_by_id(**kwargs):
@@ -294,8 +304,7 @@ def change_card_by_id(**kwargs):
     Аргументы: id, name, description (именованные).
     Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, нарушена уникальность).
     """
-    db = Database.instance()
-    return db.fetch_one_returning(MY_API_FOLDER + "change_card_by_id.sql", params = kwargs)
+    return DB.fetch_one_returning(CHANGE_CARD_BY_ID, params = kwargs)
 
 @try_return_bool
 def deactivate_subcard_by_id(subcard_id):
@@ -304,8 +313,7 @@ def deactivate_subcard_by_id(subcard_id):
     Аргумент: subcard_id.
     Возвращает True, если успех, иначе False.
     """
-    db = Database.instance()
-    db.execute(MY_API_FOLDER + "deactivate_subcard_by_id.sql", params = {'id': subcard_id})
+    DB.execute(DEACTIVATE_SUBCARD_BY_ID, params = {'id': subcard_id})
 
 @try_return_bool
 def reactivate_subcard_by_id(subcard_id):
@@ -314,8 +322,7 @@ def reactivate_subcard_by_id(subcard_id):
     Аргумент: subcard_id.
     Возвращает True, если успех, иначе False.
     """
-    db = Database.instance()
-    db.execute(MY_API_FOLDER + "reactivate_subcard_by_id.sql", params = {'id': subcard_id})
+    DB.execute(REACTIVATE_SUBCARD_BY_ID, params = {'id': subcard_id})
 
 @try_return_none
 def get_active_subcards_by_card_id(card_id):
@@ -324,8 +331,7 @@ def get_active_subcards_by_card_id(card_id):
     Аргумент: card_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_all(MY_API_FOLDER + "get_active_subcards_by_card_id.sql", params = {'card_id': card_id})
+    return DB.fetch_all(GET_ACTIVE_SUBCARDS_BY_CARD_ID, params = {'card_id': card_id})
 
 @try_return_bool
 def transfer_money_between_subcards(**kwargs):
@@ -336,8 +342,7 @@ def transfer_money_between_subcards(**kwargs):
     """
     if kwargs["change_amount"] <= 0:
         raise ValueError("change_amount must be positive")
-    db = Database.instance()
-    db.execute(MY_API_FOLDER + "transfer_money_between_subcards.sql", params = kwargs)
+    DB.execute(TRANSFER_MONEY_BETWEEN_SUBCARDS, params = kwargs)
 
 @try_return_none
 def get_all_transactions_by_card_id(card_id):
@@ -346,8 +351,7 @@ def get_all_transactions_by_card_id(card_id):
     Аргумент: card_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_all(MY_API_FOLDER + "get_all_transactions_by_card_id.sql", params = {'card_id': card_id})
+    return DB.fetch_all(GET_ALL_TRANSACTIONS_BY_CARD_ID, params = {'card_id': card_id})
 
 @try_return_none
 def get_time_bound_transactions_by_card_id(**kwargs):
@@ -356,8 +360,7 @@ def get_time_bound_transactions_by_card_id(**kwargs):
     Аргументы: card_id, time_from, time_to (именованные).
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_all(MY_API_FOLDER + "get_time_bound_transactions_by_card_id.sql", params = kwargs)
+    return DB.fetch_all(GET_TIME_BOUND_TRANSACTIONS_BY_CARD_ID, params = kwargs)
 
 @try_return_none
 def get_all_transactions_by_category_id(category_id):
@@ -366,8 +369,7 @@ def get_all_transactions_by_category_id(category_id):
     Аргумент: category_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_all(MY_API_FOLDER + "get_all_transactions_by_category_id.sql", params = {'category_id': category_id})
+    return DB.fetch_all(GET_ALL_TRANSACTIONS_BY_CATEGORY_ID, params = {'category_id': category_id})
 
 @try_return_none
 def get_time_bound_transactions_by_category_id(**kwargs):
@@ -376,8 +378,7 @@ def get_time_bound_transactions_by_category_id(**kwargs):
     Аргументы: category_id, time_from, time_to (именованные).
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    db = Database.instance()
-    return db.fetch_all(MY_API_FOLDER + "get_time_bound_transactions_by_category_id.sql", params = kwargs)
+    return DB.fetch_all(GET_TIME_BOUND_TRANSACTIONS_BY_CATEGORY_ID, params = kwargs)
 
 if __name__ == "__main__":
     main()
