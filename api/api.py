@@ -1,8 +1,11 @@
-from db import Database
+from .db import Database
 
 import functools
 
 def try_return_none(func):
+    """
+    Декоратор, возвращающий результат выполнения функции или None при исключении.
+    """
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
@@ -12,6 +15,9 @@ def try_return_none(func):
     return wrapper
 
 def try_return_bool(func):
+    """
+    Декоратор, возвращающий True или False в зависимости от наличия исключения при выполнении функции.
+    """
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
@@ -21,91 +27,25 @@ def try_return_bool(func):
             return False
     return wrapper
 
-MY_API_FOLDER = "sql/"
-ADD_USER = MY_API_FOLDER + "add_user.sql"
-GET_USER_BY_ID = MY_API_FOLDER + "get_user_by_id.sql"
-GET_USER_BY_LOGIN = MY_API_FOLDER + "get_user_by_login.sql"
-ADD_CARD = MY_API_FOLDER + "add_card.sql"
-DELETE_CARD_BY_ID = MY_API_FOLDER + "delete_card_by_id.sql"
-GET_ACTIVE_CARDS_BY_OWNER_ID = MY_API_FOLDER + "get_active_cards_by_owner_id.sql"
-ADD_CATEGORY = MY_API_FOLDER + "add_category.sql"
-GET_ACTIVE_CATEGORIES_BY_OWNER_ID = MY_API_FOLDER + "get_active_categories_by_owner_id.sql"
-ADD_SUBCARD = MY_API_FOLDER + "add_subcard.sql"
-GET_SUBCARD_BY_CARD_ID_AND_CATEGORY_ID = MY_API_FOLDER + "get_subcard_by_card_id_and_category_id.sql"
-INC_MONEY_TO_SUBCARD = MY_API_FOLDER + "inc_money_to_subcard.sql"
-DEC_MONEY_FROM_SUBCARD = MY_API_FOLDER + "dec_money_from_subcard.sql"
-ADD_TEMPLATE = MY_API_FOLDER + "add_template.sql"
-GET_TEMPLATES_BY_OWNER_ID = MY_API_FOLDER + "get_templates_by_owner_id.sql"
-DELETE_TEMPLATE_BY_ID = MY_API_FOLDER + "delete_template_by_id.sql"
-CHANGE_TEMPLATE_BY_ID = MY_API_FOLDER + "change_template_by_id.sql"
-CHANGE_USER_BY_ID = MY_API_FOLDER + "change_user_by_id.sql"
-GET_INACTIVE_CATEGORIES_BY_OWNER_ID = MY_API_FOLDER + "get_inactive_categories_by_owner_id.sql"
-DEACTIVATE_CATEGORY_BY_ID = MY_API_FOLDER + "deactivate_category_by_id.sql"
-REACTIVATE_CATEGORY_BY_ID = MY_API_FOLDER + "reactivate_category_by_id.sql"
-CHANGE_CATEGORY_BY_ID = MY_API_FOLDER + "change_category_by_id.sql"
-CHANGE_CARD_BY_ID = MY_API_FOLDER + "change_card_by_id.sql"
-DEACTIVATE_SUBCARD_BY_ID = MY_API_FOLDER + "deactivate_subcard_by_id.sql"
-REACTIVATE_SUBCARD_BY_ID = MY_API_FOLDER + "reactivate_subcard_by_id.sql"
-GET_ACTIVE_SUBCARDS_BY_CARD_ID = MY_API_FOLDER + "get_active_subcards_by_card_id.sql"
-TRANSFER_MONEY_BETWEEN_SUBCARDS = MY_API_FOLDER + "transfer_money_between_subcards.sql"
-GET_ALL_TRANSACTIONS_BY_CARD_ID = MY_API_FOLDER + "get_all_transactions_by_card_id.sql"
-GET_TIME_BOUND_TRANSACTIONS_BY_CARD_ID = MY_API_FOLDER + "get_time_bound_transactions_by_card_id.sql"
-GET_ALL_TRANSACTIONS_BY_CATEGORY_ID = MY_API_FOLDER + "get_all_transactions_by_category_id.sql"
-GET_TIME_BOUND_TRANSACTIONS_BY_CATEGORY_ID = MY_API_FOLDER + "get_time_bound_transactions_by_category_id.sql"
-
 Database.configure(
-    dsn = "postgresql://postgres:postgres@localhost:5432/smart_banking",
+    dsn = "postgresql://postgres:postgres@localhost:5433/smart_banking",
     minconn = 1,
     maxconn = 10,
 )
 DB = Database.instance()
-
-def main():
-    print_help()
-
-def print_help():
-    func = [add_user,
-            get_user_by_id,
-            get_user_by_login,
-            add_card,
-            delete_card_by_id,
-            get_active_cards_by_owner_id,
-            add_category,
-            get_active_categories_by_owner_id,
-            add_subcard,
-            get_subcard_by_card_id_and_category_id,
-            inc_money_to_subcard,
-            dec_money_from_subcard,
-            add_template,
-            get_templates_by_owner_id,
-            delete_template_by_id,
-            change_template_by_id,
-            change_user_by_id,
-            get_inactive_categories_by_owner_id,
-            deactivate_category_by_id,
-            reactivate_category_by_id,
-            change_category_by_id,
-            change_card_by_id,
-            deactivate_subcard_by_id,
-            reactivate_subcard_by_id,
-            get_active_subcards_by_card_id,
-            transfer_money_between_subcards,
-            get_all_transactions_by_card_id,
-            get_time_bound_transactions_by_card_id,
-            get_all_transactions_by_category_id,
-            get_time_bound_transactions_by_category_id]
-    for f in func:
-        help(f)
-        print()
 
 @try_return_none
 def add_user(**kwargs):
     """
     Добавляет пользователя в БД.
     Аргументы: login, password_hash, password_salt, name (именованные).
-    Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, логин занят).
+    Возвращает id из БД при успехе или None при ошибке (например, логин занят).
     """
-    return DB.fetch_one_returning(ADD_USER, params = kwargs)
+    return DB.fetch_one_returning("""
+        INSERT INTO "user" (login, password_hash, password_salt, name)
+        VALUES (%(login)s, %(password_hash)s, %(password_salt)s, %(name)s)
+        RETURNING id;
+    """, params = kwargs)[0]
 
 @try_return_none
 def get_user_by_id(user_id):
@@ -114,7 +54,11 @@ def get_user_by_id(user_id):
     Аргумент: user_id.
     Возвращает строку из БД (кортеж) или None, если не найден или ошибка.
     """
-    return DB.fetch_one(GET_USER_BY_ID, params = {'id': user_id})
+    return DB.fetch_one("""
+        SELECT id, login, password_hash, password_salt, name
+        FROM "user"
+        WHERE id = %(id)s;
+    """, params = {'id': user_id})
 
 @try_return_none
 def get_user_by_login(login):
@@ -123,25 +67,37 @@ def get_user_by_login(login):
     Аргумент: login.
     Возвращает строку из БД (кортеж) или None, если не найден или ошибка.
     """
-    return DB.fetch_one(GET_USER_BY_LOGIN, params = {'login': login})
+    return DB.fetch_one("""
+        SELECT id, login, password_hash, password_salt, name
+        FROM "user"
+        WHERE login = %(login)s;
+    """, params = {'login': login})
 
 @try_return_none
 def add_card(**kwargs):
     """
     Добавляет карту в БД (is_active True, amount 0).
     Аргументы: owner_id, name, description (именованные).
-    Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, owner_id + name уже заняты).
+    Возвращает id из БД при успехе или None при ошибке (например, owner_id + name уже заняты).
     """
-    return DB.fetch_one_returning(ADD_CARD, params = kwargs)
+    return DB.fetch_one_returning("""
+        INSERT INTO card (owner_id, name, amount, is_active, description)
+        VALUES (%(owner_id)s, %(name)s, 0, true, %(description)s)
+        RETURNING id;
+    """, params = kwargs)[0]
 
-@try_return_none
+@try_return_bool
 def delete_card_by_id(card_id):
     """
     Устанавливает is_active = False для карты по id (мягкое удаление).
     Аргумент: card_id.
-    Возвращает обновлённую строку из БД (кортеж) или None, если карта не найдена или ошибка.
+    Возвращает True при успехе или False при ошибке.
     """
-    return DB.fetch_one_returning(DELETE_CARD_BY_ID, params = {'id': card_id})
+    DB.execute("""
+        UPDATE card
+        SET is_active = false
+        WHERE id = %(id)s;
+    """, params = {'id': card_id})
 
 @try_return_none
 def get_active_cards_by_owner_id(owner_id):
@@ -150,16 +106,51 @@ def get_active_cards_by_owner_id(owner_id):
     Аргумент: owner_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    return DB.fetch_all(GET_ACTIVE_CARDS_BY_OWNER_ID, params = {'owner_id': owner_id})
+    return DB.fetch_all("""
+        SELECT id, owner_id, name, amount, is_active, description
+        FROM card
+        WHERE owner_id = %(owner_id)s AND is_active IS true
+        ORDER BY id;
+    """, params = {'owner_id': owner_id})
 
 @try_return_none
 def add_category(**kwargs):
     """
     Добавляет категорию в БД (is_active True, amount 0).
     Аргументы: owner_id, name, description (именованные).
-    Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, owner_id + name уже заняты).
+    Возвращает id из БД при успехе или None при ошибке (например, owner_id + name уже заняты).
     """
-    return DB.fetch_one_returning(ADD_CATEGORY, params = kwargs)
+    return DB.fetch_one_returning("""
+        INSERT INTO category (owner_id, name, amount, is_active, description)
+        VALUES (%(owner_id)s, %(name)s, 0, true, %(description)s)
+        RETURNING id;
+    """, params = kwargs)[0]
+
+@try_return_none
+def get_category_by_id(category_id):
+    """
+    Получает категорию по id.
+    Аргумент: category_id.
+    Возвращает строку из БД (кортеж) или None, если не найдена или ошибка.
+    """
+    return DB.fetch_one_returning("""
+        SELECT id, owner_id, name, amount, is_active, description
+        FROM category
+        WHERE id = %(id)s;
+    """, params = {'id': category_id})
+
+@try_return_none
+def get_card_by_id(card_id):
+    """
+    Получает карту по id.
+    Аргумент: card_id.
+    Возвращает строку из БД (кортеж) или None, если не найдена или ошибка.
+    """
+    return DB.fetch_one_returning("""
+        SELECT id, owner_id, name, amount, is_active, description
+        FROM card
+        WHERE id = %(id)s;
+    """, params = {'id': card_id})
 
 @try_return_none
 def get_active_categories_by_owner_id(owner_id):
@@ -168,16 +159,25 @@ def get_active_categories_by_owner_id(owner_id):
     Аргумент: owner_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    return DB.fetch_all(GET_ACTIVE_CATEGORIES_BY_OWNER_ID, params = {'owner_id': owner_id})
+    return DB.fetch_all("""
+        SELECT id, owner_id, name, amount, is_active, description
+        FROM category
+        WHERE owner_id = %(owner_id)s AND is_active IS true
+        ORDER BY id;
+    """, params = {'owner_id': owner_id})
 
 @try_return_none
 def add_subcard(**kwargs):
     """
     Добавляет субкарту в БД (is_active True, amount 0).
     Аргументы: card_id, category_id, description (именованные).
-    Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, card_id + category_id уже заняты).
+    Возвращает id из БД при успехе или None при ошибке (например, card_id + category_id уже заняты).
     """
-    return DB.fetch_one_returning(ADD_SUBCARD, params = kwargs)
+    return DB.fetch_one_returning("""
+        INSERT INTO subcard (card_id, category_id, amount, description, is_active)
+        VALUES (%(card_id)s, %(category_id)s, 0, %(description)s, true)
+        RETURNING id;
+    """, params = kwargs)[0]
 
 @try_return_none
 def get_subcard_by_card_id_and_category_id(**kwargs):
@@ -186,44 +186,66 @@ def get_subcard_by_card_id_and_category_id(**kwargs):
     Аргументы: card_id, category_id (именованные).
     Возвращает строку из БД (кортеж) или None (если субкарты нет в БД или ошибка).
     """
-    return DB.fetch_one(GET_SUBCARD_BY_CARD_ID_AND_CATEGORY_ID, params = kwargs)
+    return DB.fetch_one("""
+        SELECT id, card_id, category_id, amount, description, is_active
+        FROM subcard
+        WHERE card_id = %(card_id)s AND category_id = %(category_id)s;
+    """, params = kwargs)
 
-@try_return_none
+@try_return_bool
 def inc_money_to_subcard(**kwargs):
     """
     Добавляет (inc = increase) деньги на субкарту в БД с занесением в логи.
     Аргументы: card_id, category_id, inc_amount, description (именованные).
-    Возвращает строку из БД (кортеж) или None (при неположительном inc_amount, или если субкарты нет в БД, или в случае ошибки).
+    Возвращает True при успехе или False при ошибке (при неположительном inc_amount, или если субкарты нет в БД, или в случае другой ошибки).
     """
     if kwargs["inc_amount"] <= 0:
         raise ValueError("inc_amount must be positive")
     subcard = get_subcard_by_card_id_and_category_id(**kwargs)
     if subcard is None:
-        return None
-    return DB.fetch_one_returning(INC_MONEY_TO_SUBCARD, params = kwargs)
+        raise LookupError("subcard not found")
+    DB.execute("""
+        INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
+        VALUES (NULL, NULL, %(card_id)s, %(category_id)s, %(inc_amount)s, %(description)s);
 
-@try_return_none
+        UPDATE subcard
+        SET amount = amount + %(inc_amount)s
+        WHERE card_id = %(card_id)s AND category_id = %(category_id)s;
+    """, params = kwargs)
+
+@try_return_bool
 def dec_money_from_subcard(**kwargs):
     """
     Вычитает (dec = decrease) деньги из субкарты в БД с занесением в логи.
     Аргументы: card_id, category_id, dec_amount, description (именованные).
-    Возвращает строку из БД (кортеж) или None (при неположительном dec_amount, или если субкарты нет в БД, или в случае ошибки).
+    Возвращает True при успехе или False при ошибке (при неположительном dec_amount, или если субкарты нет в БД, или в случае другой ошибки).
     """
     if kwargs["dec_amount"] <= 0:
         raise ValueError("dec_amount must be positive")
     subcard = get_subcard_by_card_id_and_category_id(**kwargs)
     if subcard is None:
-        return None
-    return DB.fetch_one_returning(DEC_MONEY_FROM_SUBCARD, params = kwargs)
+        raise LookupError("subcard not found")
+    DB.execute("""
+        INSERT INTO transaction (card_id_to, category_id_to, card_id_from, category_id_from, amount, description)
+        VALUES (NULL, NULL, %(card_id)s, %(category_id)s, %(dec_amount)s, %(description)s);
+
+        UPDATE subcard
+        SET amount = amount - %(dec_amount)s
+        WHERE card_id = %(card_id)s AND category_id = %(category_id)s;
+    """, params = kwargs)
 
 @try_return_none
 def add_template(**kwargs):
     """
     Добавляет шаблон в БД.
     Аргументы: owner_id, percents (по категориям), description (именованные).
-    Возвращает строку из БД (кортеж) или None при ошибке.
+    Возвращает id из БД или None при ошибке.
     """
-    return DB.fetch_one_returning(ADD_TEMPLATE, params = kwargs)
+    return DB.fetch_one_returning("""
+        INSERT INTO template (owner_id, percents, description)
+        VALUES (%(owner_id)s, %(percents)s, %(description)s)
+        RETURNING id;
+    """, params = kwargs)[0]
 
 @try_return_none
 def get_templates_by_owner_id(owner_id):
@@ -232,7 +254,12 @@ def get_templates_by_owner_id(owner_id):
     Аргумент: owner_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    return DB.fetch_all(GET_TEMPLATES_BY_OWNER_ID, params = {'owner_id': owner_id})
+    return DB.fetch_all("""
+        SELECT id, owner_id, percents, description
+        FROM template
+        WHERE owner_id = %(owner_id)s
+        ORDER BY id;
+    """, params = {'owner_id': owner_id})
 
 @try_return_bool
 def delete_template_by_id(template_id):
@@ -241,25 +268,35 @@ def delete_template_by_id(template_id):
     Аргумент: template_id.
     Возвращает True, если успех, иначе False.
     """
-    DB.execute(DELETE_TEMPLATE_BY_ID, params = {'id': template_id})
+    DB.execute("""
+        DELETE FROM template WHERE id = %(id)s;
+    """, params = {'id': template_id})
 
-@try_return_none
+@try_return_bool
 def change_template_by_id(**kwargs):
     """
     Меняет шаблон в БД.
     Аргументы: id, percents (по категориям), description (именованные).
-    Возвращает строку из БД (кортеж) или None при ошибке.
+    Возвращает True, если успех, иначе False.
     """
-    return DB.fetch_one_returning(CHANGE_TEMPLATE_BY_ID, params = kwargs)
+    DB.execute("""
+        UPDATE template
+        SET percents = %(percents)s, description = %(description)s
+        WHERE id = %(id)s;
+    """, params = kwargs)
 
-@try_return_none
+@try_return_bool
 def change_user_by_id(**kwargs):
     """
     Меняет пароль и/или имя пользователя в БД.
     Аргументы: id, password_hash, password_salt, name (именованные).
-    Возвращает строку из БД (кортеж) при успехе или None при ошибке.
+    Возвращает True, если успех, иначе False.
     """
-    return DB.fetch_one_returning(CHANGE_USER_BY_ID, params=kwargs)
+    DB.execute("""
+        UPDATE "user"
+        SET password_hash = %(password_hash)s, password_salt = %(password_salt)s, name = %(name)s
+        WHERE id = %(id)s;
+    """, params = kwargs)
 
 @try_return_none
 def get_inactive_categories_by_owner_id(owner_id):
@@ -268,7 +305,12 @@ def get_inactive_categories_by_owner_id(owner_id):
     Аргумент: owner_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    return DB.fetch_all(GET_INACTIVE_CATEGORIES_BY_OWNER_ID, params = {'owner_id': owner_id})
+    return DB.fetch_all("""
+        SELECT id, owner_id, name, amount, is_active, description
+        FROM category
+        WHERE owner_id = %(owner_id)s AND is_active IS false
+        ORDER BY id;
+    """, params = {'owner_id': owner_id})
 
 @try_return_bool
 def deactivate_category_by_id(category_id):
@@ -277,7 +319,11 @@ def deactivate_category_by_id(category_id):
     Аргумент: category_id.
     Возвращает True, если успех, иначе False.
     """
-    DB.execute(DEACTIVATE_CATEGORY_BY_ID, params = {'id': category_id})
+    DB.execute("""
+        UPDATE category
+        SET is_active = false
+        WHERE id = %(id)s;
+    """, params = {'id': category_id})
 
 @try_return_bool
 def reactivate_category_by_id(category_id):
@@ -286,25 +332,37 @@ def reactivate_category_by_id(category_id):
     Аргумент: category_id.
     Возвращает True, если успех, иначе False.
     """
-    DB.execute(REACTIVATE_CATEGORY_BY_ID, params = {'id': category_id})
+    DB.execute("""
+        UPDATE category
+        SET is_active = true
+        WHERE id = %(id)s;
+    """, params = {'id': category_id})
 
-@try_return_none
+@try_return_bool
 def change_category_by_id(**kwargs):
     """
     Меняет имя и/или описание категории.
     Аргументы: id, name, description (именованные).
-    Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, нарушена уникальность).
+    Возвращает True, если успех, иначе False (например, нарушена уникальность).
     """
-    return DB.fetch_one_returning(CHANGE_CATEGORY_BY_ID", params = kwargs)
+    DB.execute("""
+        UPDATE category
+        SET name = %(name)s, description = %(description)s
+        WHERE id = %(id)s;
+    """, params = kwargs)
 
-@try_return_none
+@try_return_bool
 def change_card_by_id(**kwargs):
     """
     Меняет имя и/или описание карты.
     Аргументы: id, name, description (именованные).
-    Возвращает строку из БД (кортеж) при успехе или None при ошибке (например, нарушена уникальность).
+    Возвращает True, если успех, иначе False (например, нарушена уникальность).
     """
-    return DB.fetch_one_returning(CHANGE_CARD_BY_ID, params = kwargs)
+    DB.execute("""
+        UPDATE card
+        SET name = %(name)s, description = %(description)s
+        WHERE id = %(id)s;
+    """, params = kwargs)
 
 @try_return_bool
 def deactivate_subcard_by_id(subcard_id):
@@ -313,7 +371,11 @@ def deactivate_subcard_by_id(subcard_id):
     Аргумент: subcard_id.
     Возвращает True, если успех, иначе False.
     """
-    DB.execute(DEACTIVATE_SUBCARD_BY_ID, params = {'id': subcard_id})
+    DB.execute("""
+        UPDATE subcard
+        SET is_active = false
+        WHERE id = %(id)s;
+    """, params = {'id': subcard_id})
 
 @try_return_bool
 def reactivate_subcard_by_id(subcard_id):
@@ -322,7 +384,11 @@ def reactivate_subcard_by_id(subcard_id):
     Аргумент: subcard_id.
     Возвращает True, если успех, иначе False.
     """
-    DB.execute(REACTIVATE_SUBCARD_BY_ID, params = {'id': subcard_id})
+    DB.execute("""
+        UPDATE subcard
+        SET is_active = true
+        WHERE id = %(id)s;
+    """, params = {'id': subcard_id})
 
 @try_return_none
 def get_active_subcards_by_card_id(card_id):
@@ -331,7 +397,12 @@ def get_active_subcards_by_card_id(card_id):
     Аргумент: card_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    return DB.fetch_all(GET_ACTIVE_SUBCARDS_BY_CARD_ID, params = {'card_id': card_id})
+    return DB.fetch_all("""
+        SELECT id, card_id, category_id, amount, description, is_active
+        FROM subcard
+        WHERE card_id = %(card_id)s
+          AND is_active IS true;
+    """, params = {'card_id': card_id})
 
 @try_return_bool
 def transfer_money_between_subcards(**kwargs):
@@ -342,7 +413,24 @@ def transfer_money_between_subcards(**kwargs):
     """
     if kwargs["change_amount"] <= 0:
         raise ValueError("change_amount must be positive")
-    DB.execute(TRANSFER_MONEY_BETWEEN_SUBCARDS, params = kwargs)
+    subcard_from = get_subcard_by_card_id_and_category_id(card_id = kwargs["card_id_from"], category_id = kwargs["category_id_from"])
+    if subcard_from is None:
+        raise LookupError("subcard_from not found")
+    subcard_to = get_subcard_by_card_id_and_category_id(card_id = kwargs["card_id_to"], category_id = kwargs["category_id_to"])
+    if subcard_to is None:
+        raise LookupError("subcard_to not found")
+    DB.execute("""
+        INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
+        VALUES (%(card_id_from)s, %(category_id_from)s, %(card_id_to)s, %(category_id_to)s, %(change_amount)s, %(description)s);
+
+        UPDATE subcard
+        SET amount = amount + %(change_amount)s
+        WHERE card_id = %(card_id_to)s AND category_id = %(category_id_to)s;
+
+        UPDATE subcard
+        SET amount = amount - %(change_amount)s
+        WHERE card_id = %(card_id_from)s AND category_id = %(category_id_from)s;
+    """, params = kwargs)
 
 @try_return_none
 def get_all_transactions_by_card_id(card_id):
@@ -351,7 +439,12 @@ def get_all_transactions_by_card_id(card_id):
     Аргумент: card_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    return DB.fetch_all(GET_ALL_TRANSACTIONS_BY_CARD_ID, params = {'card_id': card_id})
+    return DB.fetch_all("""
+        SELECT id, timestamptz, card_id_from, card_id_to, category_id_from, category_id_to, amount, description
+        FROM transaction
+        WHERE card_id_from = %(card_id)s
+           OR card_id_to = %(card_id)s;
+    """, params = {'card_id': card_id})
 
 @try_return_none
 def get_time_bound_transactions_by_card_id(**kwargs):
@@ -360,7 +453,13 @@ def get_time_bound_transactions_by_card_id(**kwargs):
     Аргументы: card_id, time_from, time_to (именованные).
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    return DB.fetch_all(GET_TIME_BOUND_TRANSACTIONS_BY_CARD_ID, params = kwargs)
+    return DB.fetch_all("""
+        SELECT id, timestamptz, card_id_from, card_id_to, category_id_from, category_id_to, amount, description
+        FROM transaction
+        WHERE (card_id_from = %(card_id)s
+               OR card_id_to = %(card_id)s)
+          AND timestamptz BETWEEN %(time_from)s AND %(time_to)s;
+    """, params = kwargs)
 
 @try_return_none
 def get_all_transactions_by_category_id(category_id):
@@ -369,7 +468,12 @@ def get_all_transactions_by_category_id(category_id):
     Аргумент: category_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    return DB.fetch_all(GET_ALL_TRANSACTIONS_BY_CATEGORY_ID, params = {'category_id': category_id})
+    return DB.fetch_all("""
+        SELECT id, timestamptz, card_id_from, card_id_to, category_id_from, category_id_to, amount, description
+        FROM transaction
+        WHERE category_id_from = %(category_id)s
+           OR category_id_to = %(category_id)s;
+    """, params = {'category_id': category_id})
 
 @try_return_none
 def get_time_bound_transactions_by_category_id(**kwargs):
@@ -378,7 +482,16 @@ def get_time_bound_transactions_by_category_id(**kwargs):
     Аргументы: category_id, time_from, time_to (именованные).
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
-    return DB.fetch_all(GET_TIME_BOUND_TRANSACTIONS_BY_CATEGORY_ID, params = kwargs)
+    return DB.fetch_all("""
+        SELECT id, timestamptz, card_id_from, card_id_to, category_id_from, category_id_to, amount, description
+        FROM transaction
+        WHERE (category_id_from = %(category_id)s
+               OR category_id_to = %(category_id)s)
+          AND timestamptz BETWEEN %(time_from)s AND %(time_to)s;
+    """, params = kwargs)
 
 if __name__ == "__main__":
-    main()
+    import inspect
+    for name, obj in list(globals().items()):
+        if inspect.isfunction(obj):
+            help(obj)

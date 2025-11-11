@@ -1,5 +1,4 @@
 import threading
-from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import psycopg2
@@ -66,11 +65,10 @@ class Database:
             self._pool.putconn(conn)
 
     # --- публичные методы JDBC-подобного стиля ---
-    def execute(self, sql_path: Union[str, Path], isolation: str = "read_committed", params: Params = None) -> int:
+    def execute(self, sql: str, isolation: str = "read_committed", params: Params = None) -> int:
         """
         Выполнить команду (INSERT/UPDATE/DELETE/DDL). Возвращает rowcount.
         """
-        sql = Path(sql_path).read_text(encoding="utf-8")
         conn, cur, prev_iso = self._get_conn_cursor(isolation)
         ok = False
         try:
@@ -80,8 +78,7 @@ class Database:
         finally:
             self._cleanup(conn, cur, prev_iso, ok)
 
-    def fetch_one(self, sql_path: Union[str, Path], isolation: str = "read_committed", params: Params = None):
-        sql = Path(sql_path).read_text(encoding="utf-8")
+    def fetch_one(self, sql: str, isolation: str = "read_committed", params: Params = None):
         conn, cur, prev_iso = self._get_conn_cursor(isolation)
         ok = False
         try:
@@ -91,8 +88,7 @@ class Database:
         finally:
             self._cleanup(conn, cur, prev_iso, ok)
 
-    def fetch_all(self, sql_path: Union[str, Path], isolation: str = "read_committed", params: Params = None):
-        sql = Path(sql_path).read_text(encoding="utf-8")
+    def fetch_all(self, sql: str, isolation: str = "read_committed", params: Params = None):
         conn, cur, prev_iso = self._get_conn_cursor(isolation)
         ok = False
         try:
@@ -102,9 +98,9 @@ class Database:
         finally:
             self._cleanup(conn, cur, prev_iso, ok)
 
-    def fetch_one_returning(self, sql_path: Union[str, Path], isolation: str = "read_committed", params: Params = None):
+    def fetch_one_returning(self, sql: str, isolation: str = "read_committed", params: Params = None):
         """Удобно для INSERT ... RETURNING id"""
-        return self.fetch_one(sql_path, isolation, params)
+        return self.fetch_one(sql, isolation, params)
 
     # ping для healthcheck
     def ping(self):
