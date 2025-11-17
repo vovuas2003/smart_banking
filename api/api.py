@@ -2,14 +2,16 @@
 # Класс для работы с БД #
 #########################
 
-from .db import Database
+# для вызова справки при запуске этого файла без подключения к базе
+if __name__ != "__main__":
+    from .db import Database
 
-Database.configure(
-    dsn = "postgresql://python_smart_banking_dml:python_smart_banking_dml@localhost:5433/smart_banking",
-    minconn = 1,
-    maxconn = 10,
-)
-DB = Database.instance()
+    Database.configure(
+        dsn = "postgresql://python_smart_banking_dml:python_smart_banking_dml@localhost:5433/smart_banking",
+        minconn = 1,
+        maxconn = 10,
+    )
+    DB = Database.instance()
 
 ###################################
 # Декораторы для обработки ошибок #
@@ -526,82 +528,99 @@ def delete_subcard_by_id(subcard_id, description = None):
 # API для различных операций с деньгами #
 #########################################
 
-# old TODO: одним sql запросом делать is_active = true, а также создавать субкарту, если её нет
-# new TODO: принимать сразу subcard_id; подразумевать, но тихо проверять, что такая субкарта есть в БД
-#           переписать docstring (функция возвращает True, если субкарты нет в БД)
 @try_return_bool
 def inc_money_to_subcard(**kwargs):
     """
-    Добавляет (inc = increase) деньги на субкарту в БД с занесением в логи.
-    Аргументы: card_id, category_id, inc_amount, description (именованные).
-    Возвращает True при успехе, иначе False (при неположительном inc_amount, или если субкарты нет в БД, или в случае другой ошибки).
+    Добавляет (inc = increase) деньги на субкарту с занесением в логи. Подразумевается, что субкарта есть в БД и активна (следует из веб-интерфейса).
+    На всякий случай проверяется активность субкарты, но если субкарты нет или она неактивна, то ничего не происходит.
+    Аргументы: subcard_id, inc_amount, description (именованные).
+    Возвращает True при успехе (даже если субкарты нет в БД или она неактивна), иначе False (в том числе, при неположительном inc_amount).
     """
     if kwargs["inc_amount"] <= 0:
         raise ValueError("inc_amount must be positive")
-    if CHECK_SUBCARD_EXISTS:
-        subcard = get_subcard_by_card_id_and_category_id(**kwargs)
-        if subcard is None:
-            raise LookupError("subcard not found")
     DB.execute("""
+        WITH updated AS (
+            UPDATE subcard
+            SET amount = amount + %(inc_amount)s
+            WHERE id = %(subcard_id)s AND is_active IS true
+            RETURNING card_id, category_id
+        )
         INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
-        VALUES (NULL, NULL, %(card_id)s, %(category_id)s, %(inc_amount)s, %(description)s);
-
-        UPDATE subcard
-        SET amount = amount + %(inc_amount)s
-        WHERE card_id = %(card_id)s AND category_id = %(category_id)s;
+        SELECT NULL, NULL, card_id, category_id, %(inc_amount)s, %(description)s
+        FROM updated;
     """, params = kwargs)
 
-# TODO: аналогично, как в inc_money_to_subcard
 @try_return_bool
 def dec_money_from_subcard(**kwargs):
     """
-    Вычитает (dec = decrease) деньги из субкарты в БД с занесением в логи.
-    Аргументы: card_id, category_id, dec_amount, description (именованные).
-    Возвращает True при успехе, иначе False (при неположительном dec_amount, или если субкарты нет в БД, или в случае другой ошибки).
+    Вычитает (dec = decrease) деньги из субкарты с занесением в логи. Подразумевается, что субкарта есть в БД и активна (следует из веб-интерфейса).
+    На всякий случай проверяется активность субкарты, но если субкарты нет или она неактивна, то ничего не происходит.
+    Также проверяется, что хотим вычесть не больше, чем есть сейчас.
+    Аргументы: subcard_id, dec_amount, description (именованные).
+    Возвращает True при успехе (даже если субкарты нет в БД, или она неактивна, или недостаточно денег), иначе False (в том числе, при неположительном dec_amount).
     """
     if kwargs["dec_amount"] <= 0:
         raise ValueError("dec_amount must be positive")
-    if CHECK_SUBCARD_EXISTS:
-        subcard = get_subcard_by_card_id_and_category_id(**kwargs)
-        if subcard is None:
-            raise LookupError("subcard not found")
     DB.execute("""
-        INSERT INTO transaction (card_id_to, category_id_to, card_id_from, category_id_from, amount, description)
-        VALUES (NULL, NULL, %(card_id)s, %(category_id)s, %(dec_amount)s, %(description)s);
-
-        UPDATE subcard
-        SET amount = amount - %(dec_amount)s
-        WHERE card_id = %(card_id)s AND category_id = %(category_id)s;
+        WITH updated AS (
+            UPDATE subcard
+            SET amount = amount - %(dec_amount)s
+            WHERE id = %(subcard_id)s AND is_active IS true AND amount >= %(dec_amount)s
+            RETURNING card_id, category_id
+        )
+        INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
+        SELECT card_id, category_id, NULL, NULL, %(dec_amount)s, %(description)s
+        FROM updated;
     """, params = kwargs)
 
-# TODO: аналогично, как в inc_money_to_subcard
 @try_return_bool
 def transfer_money_between_subcards(**kwargs):
     """
-    Переводит деньги между субкартами в БД с занесением в логи.
-    Аргументы: card_id_from, category_id_from, card_id_to, category_id_to, change_amount, description (именованные).
-    Возвращает True при успехе, иначе False.
+    Переводит деньги между субкартами с занесением в логи.
+
+    Подразумевается, что субкарта, с которой делается перевод, есть в БД и активна (следует из веб-интерфейса).
+    На всякий случай проверяется активность этой субкарты, но если субкарты нет или она неактивна, то ничего не происходит.
+    Также проверяется, что хотим вычесть не больше, чем есть сейчас.
+
+    Но субкарты, на которую делается перевод (card_id_to + category_id_to), может и не быть в БД (или она есть, но неактивна).
+    В таком случае нужная субкарта автоматически создаётся (или активируется).
+    Однако в самом начале проверяется, что субкарта, с которой делается перевод, не является комбинацией карты и категории, куда хотим сделать перевод.
+
+    Аргументы: subcard_id_from, card_id_to, category_id_to, change_amount, description (именованные).
+    Возвращает True при успехе (даже если subcard_from нет в БД, или она неактивна, или недостаточно денег), иначе False (в том числе, при неположительном change_amount).
     """
     if kwargs["change_amount"] <= 0:
         raise ValueError("change_amount must be positive")
-    if CHECK_SUBCARD_EXISTS:
-        subcard_from = get_subcard_by_card_id_and_category_id(card_id = kwargs["card_id_from"], category_id = kwargs["category_id_from"])
-        if subcard_from is None:
-            raise LookupError("subcard_from not found")
-        subcard_to = get_subcard_by_card_id_and_category_id(card_id = kwargs["card_id_to"], category_id = kwargs["category_id_to"])
-        if subcard_to is None:
-            raise LookupError("subcard_to not found")
     DB.execute("""
+        WITH from_subcard AS (
+            SELECT id AS from_id, card_id AS from_card_id, category_id AS from_category_id, amount 
+            FROM subcard 
+            WHERE id = %(subcard_id_from)s
+                AND is_active IS true
+                AND amount >= %(change_amount)s
+                AND (card_id, category_id) != (%(card_id_to)s, %(category_id_to)s)  -- Запрет перевода на ту же субкарту (бесполезно и засоряет логи)
+        ),
+        to_upsert AS (
+            INSERT INTO subcard (card_id, category_id, amount, description, is_active)
+            SELECT %(card_id_to)s, %(category_id_to)s, 0, 'Создано автоматически при переводе.', true
+            FROM from_subcard  -- INSERT выполнится только если from_subcard не пуст (т.е. проверка прошла)
+            ON CONFLICT (card_id, category_id)
+            DO UPDATE SET is_active = true  -- При конфликте (существующая субкарта): активируем, но НЕ меняем amount и description
+            RETURNING id AS to_id
+        ),
+        transfer_out AS (
+            UPDATE subcard 
+            SET amount = amount - %(change_amount)s 
+            WHERE id = (SELECT from_id FROM from_subcard)
+        ),
+        transfer_in AS (
+            UPDATE subcard 
+            SET amount = amount + %(change_amount)s 
+            WHERE id = (SELECT to_id FROM to_upsert)
+        )
         INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
-        VALUES (%(card_id_from)s, %(category_id_from)s, %(card_id_to)s, %(category_id_to)s, %(change_amount)s, %(description)s);
-
-        UPDATE subcard
-        SET amount = amount + %(change_amount)s
-        WHERE card_id = %(card_id_to)s AND category_id = %(category_id_to)s;
-
-        UPDATE subcard
-        SET amount = amount - %(change_amount)s
-        WHERE card_id = %(card_id_from)s AND category_id = %(category_id_from)s;
+        SELECT from_card_id, from_category_id, %(card_id_to)s, %(category_id_to)s, %(change_amount)s, %(description)s
+        FROM from_subcard;
     """, params = kwargs)
 
 # TODO
@@ -614,66 +633,65 @@ def apply_distribution_to_card(card_id, distributed_amounts, description = None)
     Опциональный аргумент (для логов): description (по умолчанию равен None, в таком случае создаётся дефолтное описание).
     Возвращает True при успехе, иначе False.
     """
+    if description is None:
+        description = "Зачисление по шаблону."
+    # проверка неотрицательности amount, если надо перегруппировка для executemany
     DB.executemany("""
-        ...
+        -- Думаю, надо именно executemany
     """, params_seq = ...)
 
 # TODO
 @try_return_bool
-def rename_category():
+def collect_category_money_on_one_card(**kwargs):
     """
-    Закрытие текущей категории, создание новой категории с переводом всех денег.
-    """
-    pass
+    Собирает все деньги одной категории на одну карту. Снимаются деньги только с активных субкарт с ненулевым балансом.
+    Если на этой карте нет нужной субкарты (или она неактивна), то она создаётся (активируется).
 
-# old TODO: переписать на join
-# new TODO: категории и так у каждого юзера свои, так что всё проще, но всё остальное как в inc_money_to_subcard
-# ???? следить за активностью субкарт
-# !!!! сделать позиционные аргументы
-@try_return_bool
-def collect_category_money_on_one_subcard(**kwargs):
-    """
-    Собирает все деньги одной категории на одну карту.
     Аргументы: card_id, category_id (именованные).
-    Опциональный аргумент (для логов): description (именованный).
-    Возвращает True, если не было критичных ошибок, иначе False.
-    Эта высокоуровневая функция в процессе работы вызывает низкоуровевые функции, которые обёрнуты в декораторы (поэтому ошибки от них по возможности игнорируются).
-    Требуется явная проверка существования субкарты, т.к. для дальнейшей работы нужны данные по субкарте, отсутствующие в аргументах.
+    Опциональный аргумент (для логов): description (именованный, если равен None или отсутствует, создаётся дефолтное описание).
+    Возвращает True при успехе, иначе False.
     """
-    # нужны дальше + не передаём возможный опциональный аргумент description через **kwargs
-    card_id = kwargs['card_id']
-    category_id = kwargs['category_id']
-    subcard = get_subcard_by_card_id_and_category_id(card_id = card_id, category_id = category_id)
-    if subcard is None:
-        raise LookupError("subcard not found or error")
-    subcard_id = subcard[0]
-    card = get_card_by_id(card_id)
-    if card is None:
-        raise LookupError("unexpected error")
-    owner_id = card[1]
-    owner_cards = get_active_cards_by_owner_id(owner_id)
-    if owner_cards is None:
-        raise LookupError("unexpected error")
-    if 'description' in kwargs:
-        description = kwargs['description']
-    else:
-        description = "Сбор всех денег одной категории на одну карту." # значение description по умолчанию
-    for another_card in owner_cards:
-        another_card_id = another_card[0]
-        if another_card_id == card_id: # пропускаем карту, на которую хотим перевести деньги
-            continue
-        another_subcard = get_subcard_by_card_id_and_category_id(card_id = another_card_id, category_id = category_id)
-        if another_subcard is None: # нет такой категории на такой карте или ошибка
-            continue
-        change_amount = another_subcard[3]
-        if change_amount <= 0: # хотим переводить только положительный баланс (логика согласована с функцией перевода денег)
-            continue
-        # не проверяем результат, т.е. не считаем критичной возможную ошибку тут, т.к. каждый вызов функции перевода - отдельная SQL транзакция (логика класса в db.py), в случае ошибки всё равно не сможем откатить уже прошедшие переводы
-        transfer_money_between_subcards(card_id_from = another_card_id, category_id_from = category_id, card_id_to = card_id, category_id_to = category_id, change_amount = change_amount, description = description)
+    description = kwargs.get('description', None)
+    if description is None:
+        description = "Сбор денег категории на одну карту."
+    DB.execute("""
+        -- Наверное, через cross join получение пар субкарт для перевода
+        -- Не забыть проверку активности и баланса субкарт
+    """, params = {'card_id': card_id, 'category_id': category_id})
+
+# TODO
+@try_return_bool
+def rename_category_add_new(**kwargs):
+    """
+    Деактивация указанной категории (и всех субкарт на ней), создание новой категории с переводом всех денег на неё (с созданием субкарт).
+    Аргументы: old_category_id, new_category_name, new_category_description (именованные).
+    Опциональный аргумент (для логов): description (именованный, если равен None или отсутствует, создаётся дефолтное описание).
+    Возвращает True при успехе, иначе False (в том числе, если не удалось создать новую категорию из-за конфликта уникальности name).
+    """
+    description = kwargs.get('description', None)
+    if description is None:
+        description = "Закрытие категории с созданием новой."
+    # DB.execute # owner_id из старой категории
+
+# TODO
+@try_return_bool
+def rename_category_to_current(**kwargs):
+    """
+    Деактивация одной категории (и всех субкарт на ней) с переводом всех денег на другую существующую категорию (с созданием/активацией субкарт).
+    Аргументы: old_category_id, new_category_id (именованные).
+    Опциональный аргумент (для логов): description (именованный, если равен None или отсутствует, создаётся дефолтное описание).
+    Возвращает True при успехе, иначе False.
+    """
+    description = kwargs.get('description', None)
+    if description is None:
+        description = "Закрытие категории с переводом денег на существующую."
+    # DB.execute # ? проверять owner_id ?
 
 #################################
 # API для работы с логами из БД #
 #################################
+
+# TODO: возвращать в человекочитаемом виде, возможно сразу в excel или сделать отдельную функцию save_to_file и бесплатно задублировать api
 
 @try_return_none
 def get_all_transactions_by_card_id(card_id):
