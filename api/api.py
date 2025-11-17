@@ -445,7 +445,7 @@ def add_subcard(**kwargs):
 @try_return_none
 def get_subcard_by_id(subcard_id):
     """
-    Получает субкарту id.
+    Получает субкарту по id.
     Аргумент: subcard_id.
     Возвращает строку из БД (кортеж) или None (если субкарты нет в БД или ошибка).
     """
@@ -528,6 +528,7 @@ def delete_subcard_by_id(subcard_id, description = None):
 
 # old TODO: одним sql запросом делать is_active = true, а также создавать субкарту, если её нет
 # new TODO: принимать сразу subcard_id; подразумевать, но тихо проверять, что такая субкарта есть в БД
+#           переписать docstring (функция возвращает True, если субкарты нет в БД)
 @try_return_bool
 def inc_money_to_subcard(**kwargs):
     """
@@ -612,6 +613,16 @@ def apply_distribution_to_card(card_id, distributed_amounts, description = None)
     Аргументы: card_id, distributed_amounts (словарь с ключами category_id и значениями amount_for_category).
     Опциональный аргумент (для логов): description (по умолчанию равен None, в таком случае создаётся дефолтное описание).
     Возвращает True при успехе, иначе False.
+    """
+    DB.executemany("""
+        ...
+    """, params_seq = ...)
+
+# TODO
+@try_return_bool
+def rename_category():
+    """
+    Закрытие текущей категории, создание новой категории с переводом всех денег.
     """
     pass
 
