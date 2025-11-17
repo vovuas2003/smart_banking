@@ -53,7 +53,7 @@ def add_user(**kwargs):
     Аргументы: login, password, name (именованные).
     Возвращает id из БД при успехе или None при ошибке (например, логин занят).
     """
-    return DB.fetch_one_returning("""
+    return DB.fetch_one("""
         INSERT INTO "user" (login, password, name)
         VALUES (%(login)s, %(password)s, %(name)s)
         RETURNING id;
@@ -109,7 +109,7 @@ def add_card(**kwargs):
     Аргументы: owner_id, name, description (именованные).
     Возвращает id из БД при успехе или None при ошибке (в том числе, owner_id + name уже заняты).
     """
-    return DB.fetch_one_returning("""
+    return DB.fetch_one("""
         INSERT INTO card (owner_id, name, amount, is_active, description)
         VALUES (%(owner_id)s, %(name)s, 0, true, %(description)s)
         RETURNING id;
@@ -122,7 +122,7 @@ def get_card_by_id(card_id):
     Аргумент: card_id.
     Возвращает строку из БД (кортеж) или None, если не найдена или ошибка.
     """
-    return DB.fetch_one_returning("""
+    return DB.fetch_one("""
         SELECT id, owner_id, name, amount, is_active, description
         FROM card
         WHERE id = %(id)s;
@@ -209,7 +209,7 @@ def add_category(**kwargs):
     Аргументы: owner_id, name, description (именованные).
     Возвращает id из БД при успехе или None при ошибке (в том числе, owner_id + name уже заняты).
     """
-    return DB.fetch_one_returning("""
+    return DB.fetch_one("""
         INSERT INTO category (owner_id, name, amount, is_active, description)
         VALUES (%(owner_id)s, %(name)s, 0, true, %(description)s)
         RETURNING id;
@@ -222,7 +222,7 @@ def get_category_by_id(category_id):
     Аргумент: category_id.
     Возвращает строку из БД (кортеж) или None, если не найдена или ошибка.
     """
-    return DB.fetch_one_returning("""
+    return DB.fetch_one("""
         SELECT id, owner_id, name, amount, is_active, description
         FROM category
         WHERE id = %(id)s;
@@ -310,7 +310,7 @@ def add_template(**kwargs):
     Аргументы: owner_id, percents (по категориям), description (именованные).
     Возвращает id из БД или None при ошибке.
     """
-    return DB.fetch_one_returning("""
+    return DB.fetch_one("""
         INSERT INTO template (owner_id, percents, description)
         VALUES (%(owner_id)s, %(percents)s, %(description)s)
         RETURNING id;
@@ -323,7 +323,7 @@ def get_template_by_id(template_id):
     Аргумент: template_id.
     Возвращает строку из БД (кортеж) или None, если не найден или ошибка.
     """
-    return DB.fetch_one_returning("""
+    return DB.fetch_one("""
         SELECT id, owner_id, percents, description
         FROM template
         WHERE id = %(id)s;
@@ -386,7 +386,7 @@ def add_subcard(**kwargs):
     Аргументы: card_id, category_id, description (именованные).
     Возвращает id из БД при успехе или None при ошибке.
     """
-    return DB.fetch_one_returning("""
+    return DB.fetch_one("""
         INSERT INTO subcard (card_id, category_id, amount, description, is_active)
         VALUES (%(card_id)s, %(category_id)s, 0, %(description)s, true)
         ON CONFLICT (card_id, category_id) DO UPDATE SET

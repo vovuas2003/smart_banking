@@ -3,11 +3,10 @@ from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import psycopg2
 from psycopg2.pool import ThreadedConnectionPool
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 # Допустимые значения изоляции, можно расширить
 ISOLATION_MAP = {
-    "autocommit": ISOLATION_LEVEL_AUTOCOMMIT,
+    "autocommit": psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT,
     "read_committed": psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED,
     "repeatable_read": psycopg2.extensions.ISOLATION_LEVEL_REPEATABLE_READ,
     "serializable": psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE,
@@ -52,7 +51,7 @@ class Database:
     def _cleanup(self, conn, cur, prev_iso, success: bool):
         try:
             if success:
-                if conn.isolation_level != ISOLATION_LEVEL_AUTOCOMMIT:
+                if conn.isolation_level != psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT:
                     conn.commit()
             else:
                 conn.rollback()
@@ -98,9 +97,15 @@ class Database:
         finally:
             self._cleanup(conn, cur, prev_iso, ok)
 
-    def fetch_one_returning(self, sql: str, isolation: str = "read_committed", params: Params = None):
-        """Удобно для INSERT ... RETURNING id"""
-        return self.fetch_one(sql, isolation, params)
+    def executemany(self, sql: str, params_seq: Iterable[Params], isolation: str = "read_committed") -> int:
+        conn, cur, prev_iso = self._get_conn_cursor(isolation)
+        ok = False
+        try:
+            cur.executemany(sql, params_seq)
+            ok = True
+            return cur.rowcount
+        finally:
+            self._cleanup(conn, cur, prev_iso, ok)
 
     # ping для healthcheck
     def ping(self):
