@@ -495,7 +495,6 @@ def change_subcard_description_by_id(**kwargs):
         WHERE id = %(id)s;
     """, params = kwargs)
 
-# TODO: добавить снятие денег одной транзакцией
 @try_return_bool
 def delete_subcard_by_id(subcard_id, description = None):
     """
@@ -503,18 +502,32 @@ def delete_subcard_by_id(subcard_id, description = None):
     Аргумент: subcard_id.
     Опциональный аргумент (для логов): description (по умолчанию равен None, в таком случае создаётся дефолтное описание).
     Возвращает True при успехе, иначе False.
+    Подразумевается, что субкарта с таким id существует в БД (если нет, ничего не выполнится и вернётся True).
     """
+    if description is None:
+        description = "Удаление категории с карты."
     DB.execute("""
-        UPDATE subcard
-        SET is_active = false
-        WHERE id = %(id)s;
-    """, params = {'id': subcard_id})
+        WITH old_data AS (
+            SELECT card_id, category_id, amount
+            FROM subcard
+            WHERE id = %(id)s
+        ), updated AS (
+            UPDATE subcard
+            SET is_active = false, amount = 0
+            WHERE id = %(id)s
+        )
+        INSERT INTO transaction (card_id_to, category_id_to, card_id_from, category_id_from, amount, description)
+        SELECT NULL, NULL, card_id, category_id, amount, %(description)s
+        FROM old_data
+        WHERE amount != 0;
+    """, params = {'id': subcard_id, 'description': description})
 
 #########################################
 # API для различных операций с деньгами #
 #########################################
 
-# TODO: одним sql запросом делать is_active = true, а также создавать субкарту, если её нет
+# old TODO: одним sql запросом делать is_active = true, а также создавать субкарту, если её нет
+# new TODO: принимать сразу subcard_id; подразумевать, но тихо проверять, что такая субкарта есть в БД
 @try_return_bool
 def inc_money_to_subcard(**kwargs):
     """
