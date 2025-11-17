@@ -169,8 +169,6 @@ def change_card_by_id(**kwargs):
         WHERE id = %(id)s;
     """, params = kwargs)
 
-# TODO: одной sql транзакцией снять все деньги со всех субкарт (где баланс > 0) на этой карте и сделать их неактивными (!!! неактивные должны быть все, снятие только положительного баланса для логов)
-# принимать description для логов, если его нет в kwargs или None, то создать дефолтный
 @try_return_bool
 def delete_card_by_id(card_id, description = None):
     """
@@ -179,11 +177,37 @@ def delete_card_by_id(card_id, description = None):
     Опциональный аргумент (для логов): description (по умолчанию равен None, в таком случае создаётся дефолтное описание).
     Возвращает True при успехе, иначе False.
     """
+    if description is None:
+        description = "Удаление карты."
     DB.execute("""
+        -- Деактивация карты
         UPDATE card
         SET is_active = false
-        WHERE id = %(id)s;
-    """, params = {'id': card_id})
+        WHERE id = %(card_id)s;
+
+        -- Деактивация всех субкарт, связанных с картой (только активных)
+        UPDATE subcard
+        SET is_active = false
+        WHERE card_id = %(card_id)s AND is_active IS true;
+
+        -- Снятие баланса с субкарт (если amount != 0) и занесение в логи
+        -- Используем CTE для захвата данных перед обновлением, затем обновление и вставка
+        WITH subcards_to_process AS (
+            SELECT category_id, amount
+            FROM subcard
+            WHERE card_id = %(card_id)s AND amount != 0
+        ),
+        update_amounts AS (
+            UPDATE subcard
+            SET amount = 0
+            WHERE card_id = %(card_id)s AND amount != 0
+        ),
+        insert_logs AS (
+            INSERT INTO transaction (card_id_to, category_id_to, card_id_from, category_id_from, amount, description)
+            SELECT NULL, NULL, %(card_id)s, category_id, amount, %(description)s
+            FROM subcards_to_process
+        );
+    """, params = {'card_id': card_id, 'description': description})
 
 @try_return_bool
 def reactivate_card_by_id(card_id):
@@ -269,9 +293,6 @@ def change_category_by_id(**kwargs):
         WHERE id = %(id)s;
     """, params = kwargs)
 
-### NEW TODO: всё аналогично delete card !!!!!
-# TODO: одной sql транзакцией снять все деньги со всех субкарт на этой категории и сделать их неактивными
-# принимать description для логов, если его нет в kwargs или None, то создать дефолтный
 @try_return_bool
 def delete_category_by_id(category_id, description = None):
     """
@@ -280,11 +301,37 @@ def delete_category_by_id(category_id, description = None):
     Опциональный аргумент (для логов): description (по умолчанию равен None, в таком случае создаётся дефолтное описание).
     Возвращает True при успехе, иначе False.
     """
+    if description is None:
+        description = "Удаление категории."
     DB.execute("""
+        -- Деактивация категории
         UPDATE category
         SET is_active = false
-        WHERE id = %(id)s;
-    """, params = {'id': category_id})
+        WHERE id = %(category_id)s;
+
+        -- Деактивация всех субкарт, связанных с категорией (только активных)
+        UPDATE subcard
+        SET is_active = false
+        WHERE category_id = %(category_id)s AND is_active IS true;
+
+        -- Снятие баланса с субкарт (если amount != 0) и занесение в логи
+        -- Используем CTE для захвата данных перед обновлением, затем обновление и вставка
+        WITH subcards_to_process AS (
+            SELECT card_id, amount
+            FROM subcard
+            WHERE category_id = %(category_id)s AND amount != 0
+        ),
+        update_amounts AS (
+            UPDATE subcard
+            SET amount = 0
+            WHERE category_id = %(category_id)s AND amount != 0
+        ),
+        insert_logs AS (
+            INSERT INTO transaction (card_id_to, category_id_to, card_id_from, category_id_from, amount, description)
+            SELECT NULL, NULL, card_id, %(category_id)s, amount, %(description)s
+            FROM subcards_to_process
+        );
+    """, params = {'category_id': category_id, 'description': description})
 
 @try_return_bool
 def reactivate_category_by_id(category_id):
