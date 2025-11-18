@@ -420,6 +420,7 @@ def delete_template_by_id(template_id):
 # API для работы с субкартами в БД #
 ####################################
 
+# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_none
 def add_subcard(**kwargs):
     """
@@ -528,6 +529,7 @@ def delete_subcard_by_id(subcard_id, description = None):
 # API для различных операций с деньгами #
 #########################################
 
+# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def inc_money_to_subcard(**kwargs):
     """
@@ -550,6 +552,7 @@ def inc_money_to_subcard(**kwargs):
         FROM updated;
     """, params = kwargs)
 
+# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def dec_money_from_subcard(**kwargs):
     """
@@ -573,6 +576,7 @@ def dec_money_from_subcard(**kwargs):
         FROM updated;
     """, params = kwargs)
 
+# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def transfer_money_between_subcards(**kwargs):
     """
@@ -623,7 +627,7 @@ def transfer_money_between_subcards(**kwargs):
         FROM from_subcard;
     """, params = kwargs)
 
-# TODO
+# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def apply_distribution_to_card(card_id, distributed_amounts, description = None):
     """
@@ -635,31 +639,125 @@ def apply_distribution_to_card(card_id, distributed_amounts, description = None)
     """
     if description is None:
         description = "Зачисление по шаблону."
-    # проверка неотрицательности amount, если надо перегруппировка для executemany
+    if any(amount <= 0 for amount in distributed_amounts.values()):
+        raise ValueError("all amounts must be positive")
+    params_seq = [
+        {"card_id": card_id, "category_id": cat_id, "amount": amt, "description": description}
+        for cat_id, amt in distributed_amounts.items()
+    ]   
     DB.executemany("""
-        -- Думаю, надо именно executemany
-    """, params_seq = ...)
+        WITH activate_categories AS (
+            -- Принудительная активация категории, если она неактивна
+            UPDATE category
+            SET is_active = true
+            WHERE id = %(category_id)s AND is_active IS false
+            RETURNING id
+        ),
+        checks AS (
+            -- Проверка активности только карты
+            SELECT 1
+            WHERE EXISTS (SELECT 1 FROM card WHERE id = %(card_id)s AND is_active IS true)
+        ),
+        inserted_subcards AS (
+            -- Создание или восстановление субкарты (description для новой субкарты по умолчанию)
+            INSERT INTO subcard (card_id, category_id, amount, description, is_active)
+            SELECT %(card_id)s, %(category_id)s, 0, 'Автоматическое создание при зачислении по шаблону.', true
+            FROM checks
+            ON CONFLICT (card_id, category_id) DO UPDATE SET
+                is_active = true
+            RETURNING id
+        ),
+        updated AS (
+            -- Обновление amount на субкарте (только если субкарта активна после возможного восстановления)
+            UPDATE subcard
+            SET amount = amount + %(amount)s
+            FROM checks
+            WHERE subcard.card_id = %(card_id)s
+              AND subcard.category_id = %(category_id)s
+              AND subcard.is_active IS true
+            RETURNING subcard.card_id, subcard.category_id, %(amount)s AS amount
+        )
+        -- Логирование транзакций
+        INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
+        SELECT NULL, NULL, u.card_id, u.category_id, u.amount, %(description)s
+        FROM updated u;
+    """, params_seq = params_seq)
 
-# TODO
+# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def collect_category_money_on_one_card(**kwargs):
     """
     Собирает все деньги одной категории на одну карту. Снимаются деньги только с активных субкарт с ненулевым балансом.
-    Если на этой карте нет нужной субкарты (или она неактивна), то она создаётся (активируется).
+    Если на этой карте (на которую собираем деньги) нет нужной субкарты (или она неактивна), то она создаётся (активируется).
 
     Аргументы: card_id, category_id (именованные).
     Опциональный аргумент (для логов): description (именованный, если равен None или отсутствует, создаётся дефолтное описание).
     Возвращает True при успехе, иначе False.
     """
+    card_id = kwargs['card_id']
+    category_id = kwargs['category_id']
     description = kwargs.get('description', None)
     if description is None:
         description = "Сбор денег категории на одну карту."
     DB.execute("""
-        -- Наверное, через cross join получение пар субкарт для перевода
-        -- Не забыть проверку активности и баланса субкарт
-    """, params = {'card_id': card_id, 'category_id': category_id})
+        WITH activate_category AS (
+            -- Принудительная активация категории, если она неактивна
+            UPDATE category
+            SET is_active = true
+            WHERE id = %(category_id)s AND is_active IS false
+            RETURNING id
+        ),
+        checks AS (
+            -- Проверка активности карты
+            SELECT 1
+            WHERE EXISTS (SELECT 1 FROM card WHERE id = %(card_id)s AND is_active IS true)
+        ),
+        target_subcard AS (
+            -- Создание или активация субкарты на целевой карте (description для новой субкарты по умолчанию)
+            INSERT INTO subcard (card_id, category_id, amount, description, is_active)
+            SELECT %(card_id)s, %(category_id)s, 0, 'Автоматическое создание при сборе денег категории на одну карту.', true
+            FROM checks
+            ON CONFLICT (card_id, category_id) DO UPDATE SET
+                is_active = true
+            RETURNING id
+        ),
+        source_subcards AS (
+            -- Получение списка субкарт-источников: активные, ненулевой баланс, та же категория, не целевая карта
+            SELECT sc.card_id, sc.category_id, sc.amount
+            FROM subcard sc
+            WHERE sc.category_id = %(category_id)s
+              AND sc.card_id != %(card_id)s
+              AND sc.is_active IS true
+              AND sc.amount != 0
+        ),
+        updated_sources AS (
+            -- Обнуление балансов источников (сбор денег)
+            UPDATE subcard
+            SET amount = 0
+            FROM source_subcards ss
+            WHERE subcard.card_id = ss.card_id
+              AND subcard.category_id = ss.category_id
+            RETURNING ss.card_id, ss.category_id, ss.amount
+        ),
+        updated_target AS (
+            -- Добавление собранной суммы на целевую субкарту
+            UPDATE subcard
+            SET amount = amount + COALESCE((SELECT SUM(amount) FROM updated_sources), 0)
+            FROM checks, target_subcard
+            WHERE subcard.card_id = %(card_id)s
+              AND subcard.category_id = %(category_id)s
+              AND subcard.is_active IS true
+            RETURNING subcard.card_id, subcard.category_id, COALESCE((SELECT SUM(amount) FROM updated_sources), 0) AS total_amount
+        )
+        -- Логирование транзакций для каждого перевода
+        INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
+        SELECT us.card_id, us.category_id, ut.card_id, ut.category_id, us.amount, %(description)s
+        FROM updated_sources us
+        CROSS JOIN updated_target ut
+        WHERE ut.total_amount != 0;
+    """, params = {'card_id': card_id, 'category_id': category_id, 'description': description})
 
-# TODO
+# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def rename_category_add_new(**kwargs):
     """
@@ -668,12 +766,60 @@ def rename_category_add_new(**kwargs):
     Опциональный аргумент (для логов): description (именованный, если равен None или отсутствует, создаётся дефолтное описание).
     Возвращает True при успехе, иначе False (в том числе, если не удалось создать новую категорию из-за конфликта уникальности name).
     """
+    old_category_id = kwargs['old_category_id']
+    new_category_name = kwargs['new_category_name']
+    new_category_description = kwargs['new_category_description']
     description = kwargs.get('description', None)
     if description is None:
         description = "Закрытие категории с созданием новой."
-    # DB.execute # owner_id из старой категории
+    DB.execute("""
+        WITH old_category_data AS (
+            -- Получение данных старой категории (owner_id для новой)
+            SELECT owner_id, name AS old_name
+            FROM category
+            WHERE id = %(old_category_id)s
+        ),
+        deactivate_old AS (
+            -- Деактивация старой категории
+            UPDATE category
+            SET is_active = false
+            WHERE id = %(old_category_id)s
+            RETURNING id
+        ),
+        deactivate_subcards AS (
+            -- Деактивация всех субкарт старой категории
+            UPDATE subcard
+            SET is_active = false
+            WHERE category_id = %(old_category_id)s
+            RETURNING card_id, amount
+        ),
+        create_new_category AS (
+            -- Создание новой категории (с owner_id из старой)
+            INSERT INTO category (name, description, owner_id, is_active)
+            SELECT %(new_category_name)s, %(new_category_description)s, ocd.owner_id, true
+            FROM old_category_data ocd
+            WHERE NOT EXISTS (SELECT 1 FROM category WHERE name = %(new_category_name)s AND owner_id = ocd.owner_id)
+            RETURNING id AS new_category_id
+        ),
+        transfer_funds AS (
+            -- Создание субкарт новой категории на тех же картах и перенос сумм (только с ненулевым балансом)
+            INSERT INTO subcard (card_id, category_id, amount, description, is_active)
+            SELECT ds.card_id, cnc.new_category_id, ds.amount, 'Автоматическое создание при закрытии категории с созданием новой.', true
+            FROM deactivate_subcards ds
+            CROSS JOIN create_new_category cnc
+            WHERE ds.amount != 0
+            ON CONFLICT (card_id, category_id) DO UPDATE SET
+                amount = subcard.amount + EXCLUDED.amount,
+                is_active = true
+            RETURNING card_id, category_id, amount
+        )
+        -- Логирование переводов (от старой категории к новой на каждой карте)
+        INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
+        SELECT tf.card_id, %(old_category_id)s, tf.card_id, tf.category_id, tf.amount, %(description)s
+        FROM transfer_funds tf;
+    """, params = {'old_category_id': old_category_id, 'new_category_name': new_category_name, 'new_category_description': new_category_description, 'description': description})
 
-# TODO
+# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def rename_category_to_current(**kwargs):
     """
@@ -682,10 +828,55 @@ def rename_category_to_current(**kwargs):
     Опциональный аргумент (для логов): description (именованный, если равен None или отсутствует, создаётся дефолтное описание).
     Возвращает True при успехе, иначе False.
     """
+    old_category_id = kwargs['old_category_id']
+    new_category_id = kwargs['new_category_id']
     description = kwargs.get('description', None)
     if description is None:
         description = "Закрытие категории с переводом денег на существующую."
-    # DB.execute # ? проверять owner_id ?
+    DB.execute("""
+        WITH owner_check AS (
+            -- Проверка равенства owner_id старой и новой категорий
+            SELECT 1
+            WHERE (SELECT owner_id FROM category WHERE id = %(old_category_id)s) = (SELECT owner_id FROM category WHERE id = %(new_category_id)s)
+        ),
+        deactivate_old AS (
+            -- Деактивация старой категории
+            UPDATE category
+            SET is_active = false
+            WHERE id = %(old_category_id)s
+            RETURNING id
+        ),
+        deactivate_subcards AS (
+            -- Деактивация всех субкарт старой категории
+            UPDATE subcard
+            SET is_active = false
+            WHERE category_id = %(old_category_id)s
+            RETURNING card_id, amount
+        ),
+        activate_new AS (
+            -- Активация новой категории (если неактивна)
+            UPDATE category
+            SET is_active = true
+            WHERE id = %(new_category_id)s AND is_active IS false
+            RETURNING id
+        ),
+        transfer_funds AS (
+            -- Создание/активация субкарт новой категории на тех же картах и перенос сумм (только с ненулевым балансом)
+            INSERT INTO subcard (card_id, category_id, amount, description, is_active)
+            SELECT ds.card_id, %(new_category_id)s, ds.amount, 'Автоматическое создание при закрытии категории с переводом денег на существующую.', true
+            FROM deactivate_subcards ds
+            CROSS JOIN owner_check oc
+            WHERE ds.amount != 0
+            ON CONFLICT (card_id, category_id) DO UPDATE SET
+                amount = subcard.amount + EXCLUDED.amount,
+                is_active = true
+            RETURNING card_id, category_id, amount
+        )
+        -- Логирование переводов (от старой категории к новой на каждой карте)
+        INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
+        SELECT tf.card_id, %(old_category_id)s, tf.card_id, tf.category_id, tf.amount, %(description)s
+        FROM transfer_funds tf;
+    """, params = {'old_category_id': old_category_id, 'new_category_id': new_category_id, 'description': description})
 
 #################################
 # API для работы с логами из БД #
