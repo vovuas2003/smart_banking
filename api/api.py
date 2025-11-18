@@ -582,15 +582,17 @@ def transfer_money_between_subcards(**kwargs):
     """
     Переводит деньги между субкартами с занесением в логи.
 
-    Подразумевается, что субкарта, с которой делается перевод, есть в БД и активна (следует из веб-интерфейса).
-    На всякий случай проверяется активность этой субкарты, но если субкарты нет или она неактивна, то ничего не происходит.
+    Подразумевается, что субкарта, с которой делается перевод, есть в БД и активна.
+    В веб-интерфейсе на странице перевода показываем только активные карты и категории, точно нет смысла снимать деньги с несуществующей субкарты
+    С неактивной снимать тоже нет смысла, потому что я старался написать API так, чтобы на неактивной субкарте не было денег.
+    В общем, неявно проверяется активность этой субкарты, но если субкарты нет или она неактивна, то ничего не происходит.
     Также проверяется, что хотим вычесть не больше, чем есть сейчас.
 
     Но субкарты, на которую делается перевод (card_id_to + category_id_to), может и не быть в БД (или она есть, но неактивна).
     В таком случае нужная субкарта автоматически создаётся (или активируется).
     Однако в самом начале проверяется, что субкарта, с которой делается перевод, не является комбинацией карты и категории, куда хотим сделать перевод.
 
-    Аргументы: subcard_id_from, card_id_to, category_id_to, change_amount, description (именованные).
+    Аргументы: card_id_from, category_id_from, card_id_to, category_id_to, change_amount, description (именованные).
     Возвращает True при успехе (даже если subcard_from нет в БД, или она неактивна, или недостаточно денег), иначе False (в том числе, при неположительном change_amount).
     """
     if kwargs["change_amount"] <= 0:
@@ -599,7 +601,8 @@ def transfer_money_between_subcards(**kwargs):
         WITH from_subcard AS (
             SELECT id AS from_id, card_id AS from_card_id, category_id AS from_category_id, amount 
             FROM subcard 
-            WHERE id = %(subcard_id_from)s
+            WHERE card_id = %(card_id_from)s
+                AND category_id = %(category_id_from)s
                 AND is_active IS true
                 AND amount >= %(change_amount)s
                 AND (card_id, category_id) != (%(card_id_to)s, %(category_id_to)s)  -- Запрет перевода на ту же субкарту (бесполезно и засоряет логи)
@@ -759,7 +762,7 @@ def collect_category_money_on_one_card(**kwargs):
 
 # TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
-def rename_category_add_new(**kwargs):
+def delete_category_and_transfer_money_to_new(**kwargs):
     """
     Деактивация указанной категории (и всех субкарт на ней), создание новой категории с переводом всех денег на неё (с созданием субкарт).
     Аргументы: old_category_id, new_category_name, new_category_description (именованные).
@@ -821,7 +824,7 @@ def rename_category_add_new(**kwargs):
 
 # TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
-def rename_category_to_current(**kwargs):
+def delete_category_and_transfer_money_to_existing(**kwargs):
     """
     Деактивация одной категории (и всех субкарт на ней) с переводом всех денег на другую существующую категорию (с созданием/активацией субкарт).
     Аргументы: old_category_id, new_category_id (именованные).
@@ -882,7 +885,7 @@ def rename_category_to_current(**kwargs):
 # API для работы с логами из БД #
 #################################
 
-# TODO: возвращать в человекочитаемом виде, возможно сразу в excel или сделать отдельную функцию save_to_file и бесплатно задублировать api
+# TODO: возвращать в человекочитаемом виде, возможно сразу в excel или сделать отдельную функцию save_to_file и бесплатно задублировать api, также дописать API для общего анализа (только суммарные зачисления + траты + переводы с/на)
 
 @try_return_none
 def get_all_transactions_by_card_id(card_id):
