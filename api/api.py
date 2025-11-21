@@ -7,7 +7,7 @@ if __name__ != "__main__":
     from .db import Database
 
     Database.configure(
-        dsn = "postgresql://python_smart_banking_dml:python_smart_banking_dml@localhost:5433/smart_banking",
+        dsn = "postgresql://smart_banking:smart_banking@localhost:5433/smart_banking",
         minconn = 1,
         maxconn = 10,
     )
@@ -91,12 +91,12 @@ def get_user_by_login(login):
 def change_user_by_id(**kwargs):
     """
     Меняет пароль и/или имя пользователя.
-    Аргументы: id, password_hash, password_salt, name (именованные).
+    Аргументы: id, password, name (именованные).
     Возвращает True при успехе, иначе False.
     """
     DB.execute("""
         UPDATE "user"
-        SET password_hash = %(password_hash)s, password_salt = %(password_salt)s, name = %(name)s
+        SET password = %(password)s, name = %(name)s
         WHERE id = %(id)s;
     """, params = kwargs)
 
@@ -203,12 +203,12 @@ def delete_card_by_id(card_id, description = None):
             UPDATE subcard
             SET amount = 0
             WHERE card_id = %(card_id)s AND amount != 0
-        ),
-        insert_logs AS (
+        )
+        
             INSERT INTO transaction (card_id_to, category_id_to, card_id_from, category_id_from, amount, description)
             SELECT NULL, NULL, %(card_id)s, category_id, amount, %(description)s
             FROM subcards_to_process
-        );
+        ;
     """, params = {'card_id': card_id, 'description': description})
 
 @try_return_bool
@@ -327,12 +327,12 @@ def delete_category_by_id(category_id, description = None):
             UPDATE subcard
             SET amount = 0
             WHERE category_id = %(category_id)s AND amount != 0
-        ),
-        insert_logs AS (
+        )
+    
             INSERT INTO transaction (card_id_to, category_id_to, card_id_from, category_id_from, amount, description)
             SELECT NULL, NULL, card_id, %(category_id)s, amount, %(description)s
             FROM subcards_to_process
-        );
+        ;
     """, params = {'category_id': category_id, 'description': description})
 
 @try_return_bool
@@ -609,22 +609,19 @@ def transfer_money_between_subcards(**kwargs):
         ),
         to_upsert AS (
             INSERT INTO subcard (card_id, category_id, amount, description, is_active)
-            SELECT %(card_id_to)s, %(category_id_to)s, 0, 'Создано автоматически при переводе.', true
+            SELECT %(card_id_to)s, %(category_id_to)s, %(change_amount)s, 'Создано автоматически при переводе.', true
             FROM from_subcard  -- INSERT выполнится только если from_subcard не пуст (т.е. проверка прошла)
             ON CONFLICT (card_id, category_id)
-            DO UPDATE SET is_active = true  -- При конфликте (существующая субкарта): активируем, но НЕ меняем amount и description
+            DO UPDATE SET is_active = true,  -- При конфликте (существующая субкарта): активируем и сразу меняем amount, но не description
+                    amount = subcard.amount + %(change_amount)s
             RETURNING id AS to_id
         ),
         transfer_out AS (
             UPDATE subcard 
             SET amount = amount - %(change_amount)s 
             WHERE id = (SELECT from_id FROM from_subcard)
-        ),
-        transfer_in AS (
-            UPDATE subcard 
-            SET amount = amount + %(change_amount)s 
-            WHERE id = (SELECT to_id FROM to_upsert)
         )
+
         INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
         SELECT from_card_id, from_category_id, %(card_id_to)s, %(category_id_to)s, %(change_amount)s, %(description)s
         FROM from_subcard;
@@ -645,9 +642,9 @@ def apply_distribution_to_card(card_id, distributed_amounts, description = None)
     if any(amount <= 0 for amount in distributed_amounts.values()):
         raise ValueError("all amounts must be positive")
     params_seq = [
-        {"card_id": card_id, "category_id": cat_id, "amount": amt, "description": description}
+        {"card_id": card_id, "category_id": int(cat_id), "amount": amt, "description": description}
         for cat_id, amt in distributed_amounts.items()
-    ]   
+    ]
     DB.executemany("""
         WITH activate_categories AS (
             -- Принудительная активация категории, если она неактивна
@@ -661,29 +658,20 @@ def apply_distribution_to_card(card_id, distributed_amounts, description = None)
             SELECT 1
             WHERE EXISTS (SELECT 1 FROM card WHERE id = %(card_id)s AND is_active IS true)
         ),
-        inserted_subcards AS (
-            -- Создание или восстановление субкарты (description для новой субкарты по умолчанию)
+        inserted_or_updated_subcards AS (
+            -- Создание или восстановление субкарты и обновление amount в одном запросе
             INSERT INTO subcard (card_id, category_id, amount, description, is_active)
-            SELECT %(card_id)s, %(category_id)s, 0, 'Автоматическое создание при зачислении по шаблону.', true
+            SELECT %(card_id)s, %(category_id)s, %(amount)s, 'Автоматическое создание при зачислении по шаблону.', true
             FROM checks
             ON CONFLICT (card_id, category_id) DO UPDATE SET
-                is_active = true
-            RETURNING id
-        ),
-        updated AS (
-            -- Обновление amount на субкарте (только если субкарта активна после возможного восстановления)
-            UPDATE subcard
-            SET amount = amount + %(amount)s
-            FROM checks
-            WHERE subcard.card_id = %(card_id)s
-              AND subcard.category_id = %(category_id)s
-              AND subcard.is_active IS true
-            RETURNING subcard.card_id, subcard.category_id, %(amount)s AS amount
+                is_active = true,
+                amount = subcard.amount + %(amount)s
+            RETURNING id, card_id, category_id
         )
         -- Логирование транзакций
         INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
-        SELECT NULL, NULL, u.card_id, u.category_id, u.amount, %(description)s
-        FROM updated u;
+        SELECT NULL, NULL, i.card_id, i.category_id, %(amount)s, %(description)s
+        FROM inserted_or_updated_subcards i;
     """, params_seq = params_seq)
 
 # TODO: подумать над проверкой активности / восстановлением карты и категории
@@ -954,3 +942,4 @@ if __name__ == "__main__":
     for name, obj in list(globals().items()):
         if inspect.isfunction(obj):
             help(obj)
+
