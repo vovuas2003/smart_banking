@@ -642,7 +642,7 @@ def apply_distribution_to_card(card_id, distributed_amounts, description = None)
     if any(amount <= 0 for amount in distributed_amounts.values()):
         raise ValueError("all amounts must be positive")
     params_seq = [
-        {"card_id": card_id, "category_id": int(cat_id), "amount": amt, "description": description}
+        {"card_id": card_id, "category_id": cat_id, "amount": amt, "description": description}
         for cat_id, amt in distributed_amounts.items()
     ]
     DB.executemany("""
@@ -703,15 +703,6 @@ def collect_category_money_on_one_card(**kwargs):
             SELECT 1
             WHERE EXISTS (SELECT 1 FROM card WHERE id = %(card_id)s AND is_active IS true)
         ),
-        target_subcard AS (
-            -- Создание или активация субкарты на целевой карте (description для новой субкарты по умолчанию)
-            INSERT INTO subcard (card_id, category_id, amount, description, is_active)
-            SELECT %(card_id)s, %(category_id)s, 0, 'Автоматическое создание при сборе денег категории на одну карту.', true
-            FROM checks
-            ON CONFLICT (card_id, category_id) DO UPDATE SET
-                is_active = true
-            RETURNING id
-        ),
         source_subcards AS (
             -- Получение списка субкарт-источников: активные, ненулевой баланс, та же категория, не целевая карта
             SELECT sc.card_id, sc.category_id, sc.amount
@@ -731,13 +722,13 @@ def collect_category_money_on_one_card(**kwargs):
             RETURNING ss.card_id, ss.category_id, ss.amount
         ),
         updated_target AS (
-            -- Добавление собранной суммы на целевую субкарту
-            UPDATE subcard
-            SET amount = amount + COALESCE((SELECT SUM(amount) FROM updated_sources), 0)
-            FROM checks, target_subcard
-            WHERE subcard.card_id = %(card_id)s
-              AND subcard.category_id = %(category_id)s
-              AND subcard.is_active IS true
+            -- Создание или активация субкарты на целевой карте и зачисление денег на неё (description для новой субкарты по умолчанию)
+            INSERT INTO subcard (card_id, category_id, amount, description, is_active)
+            SELECT %(card_id)s, %(category_id)s, COALESCE((SELECT SUM(amount) FROM updated_sources), 0), 'Автоматическое создание при сборе денег категории на одну карту.', true
+            FROM checks
+            ON CONFLICT (card_id, category_id) DO UPDATE SET
+                is_active = true,
+                amount = subcard.amount + COALESCE((SELECT SUM(amount) FROM updated_sources), 0)
             RETURNING subcard.card_id, subcard.category_id, COALESCE((SELECT SUM(amount) FROM updated_sources), 0) AS total_amount
         )
         -- Логирование транзакций для каждого перевода
@@ -777,17 +768,23 @@ def delete_category_and_transfer_money_to_new(**kwargs):
             WHERE id = %(old_category_id)s
             RETURNING id
         ),
-        deactivate_subcards AS (
-            -- Деактивация всех субкарт старой категории
-            UPDATE subcard
-            SET is_active = false
+        old_subcard_data AS (
+            -- Получение старых данных субкарт (для возврата amount до обнуления)
+            SELECT card_id, amount
+            FROM subcard
             WHERE category_id = %(old_category_id)s
-            RETURNING card_id, amount
+        ),
+        deactivate_and_zero_subcards AS (
+            -- Деактивация и обнуление всех субкарт старой категории
+            UPDATE subcard
+            SET is_active = false, amount = 0
+            WHERE category_id = %(old_category_id)s
+            RETURNING card_id
         ),
         create_new_category AS (
             -- Создание новой категории (с owner_id из старой)
-            INSERT INTO category (name, description, owner_id, is_active)
-            SELECT %(new_category_name)s, %(new_category_description)s, ocd.owner_id, true
+            INSERT INTO category (name, description, owner_id, is_active, amount)
+            SELECT %(new_category_name)s, %(new_category_description)s, ocd.owner_id, true, 0
             FROM old_category_data ocd
             WHERE NOT EXISTS (SELECT 1 FROM category WHERE name = %(new_category_name)s AND owner_id = ocd.owner_id)
             RETURNING id AS new_category_id
@@ -795,10 +792,11 @@ def delete_category_and_transfer_money_to_new(**kwargs):
         transfer_funds AS (
             -- Создание субкарт новой категории на тех же картах и перенос сумм (только с ненулевым балансом)
             INSERT INTO subcard (card_id, category_id, amount, description, is_active)
-            SELECT ds.card_id, cnc.new_category_id, ds.amount, 'Автоматическое создание при закрытии категории с созданием новой.', true
-            FROM deactivate_subcards ds
+            SELECT osd.card_id, cnc.new_category_id, osd.amount, 'Автоматическое создание при закрытии категории с созданием новой.', true
+            FROM old_subcard_data osd
+            INNER JOIN deactivate_and_zero_subcards dzs ON osd.card_id = dzs.card_id
             CROSS JOIN create_new_category cnc
-            WHERE ds.amount != 0
+            WHERE osd.amount != 0
             ON CONFLICT (card_id, category_id) DO UPDATE SET
                 amount = subcard.amount + EXCLUDED.amount,
                 is_active = true
@@ -837,12 +835,18 @@ def delete_category_and_transfer_money_to_existing(**kwargs):
             WHERE id = %(old_category_id)s
             RETURNING id
         ),
-        deactivate_subcards AS (
-            -- Деактивация всех субкарт старой категории
-            UPDATE subcard
-            SET is_active = false
+        old_subcard_data AS (
+            -- Получение старых данных субкарт (для возврата amount до обнуления)
+            SELECT card_id, amount
+            FROM subcard
             WHERE category_id = %(old_category_id)s
-            RETURNING card_id, amount
+        ),
+        deactivate_and_zero_subcards AS (
+            -- Деактивация и обнуление всех субкарт старой категории
+            UPDATE subcard
+            SET is_active = false, amount = 0
+            WHERE category_id = %(old_category_id)s
+            RETURNING card_id
         ),
         activate_new AS (
             -- Активация новой категории (если неактивна)
@@ -854,10 +858,11 @@ def delete_category_and_transfer_money_to_existing(**kwargs):
         transfer_funds AS (
             -- Создание/активация субкарт новой категории на тех же картах и перенос сумм (только с ненулевым балансом)
             INSERT INTO subcard (card_id, category_id, amount, description, is_active)
-            SELECT ds.card_id, %(new_category_id)s, ds.amount, 'Автоматическое создание при закрытии категории с переводом денег на существующую.', true
-            FROM deactivate_subcards ds
+            SELECT osd.card_id, %(new_category_id)s, osd.amount, 'Автоматическое создание при закрытии категории с переводом денег на существующую.', true
+            FROM old_subcard_data osd
+            INNER JOIN deactivate_and_zero_subcards dzs ON osd.card_id = dzs.card_id
             CROSS JOIN owner_check oc
-            WHERE ds.amount != 0
+            WHERE osd.amount != 0
             ON CONFLICT (card_id, category_id) DO UPDATE SET
                 amount = subcard.amount + EXCLUDED.amount,
                 is_active = true
