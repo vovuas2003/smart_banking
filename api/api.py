@@ -800,12 +800,13 @@ def delete_category_and_transfer_money_to_new(**kwargs):
             ON CONFLICT (card_id, category_id) DO UPDATE SET
                 amount = subcard.amount + EXCLUDED.amount,
                 is_active = true
-            RETURNING card_id, category_id, osd.amount AS transferred_amount
+            RETURNING card_id, category_id
         )
         -- Логирование переводов (от старой категории к новой на каждой карте)
         INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
-        SELECT tf.card_id, %(old_category_id)s, tf.card_id, tf.category_id, tf.transferred_amount, %(description)s
-        FROM transfer_funds tf;
+        SELECT tf.card_id, %(old_category_id)s, tf.card_id, tf.category_id, osd.amount, %(description)s
+        FROM transfer_funds tf
+        JOIN old_subcard_data osd ON osd.card_id = tf.card_id;
     """, params = {'old_category_id': old_category_id, 'new_category_name': new_category_name, 'new_category_description': new_category_description, 'description': description})
 
 # TODO: подумать над проверкой активности / восстановлением карты и категории
@@ -866,12 +867,13 @@ def delete_category_and_transfer_money_to_existing(**kwargs):
             ON CONFLICT (card_id, category_id) DO UPDATE SET
                 amount = subcard.amount + EXCLUDED.amount,
                 is_active = true
-            RETURNING card_id, category_id, osd.amount AS transferred_amount
+            RETURNING card_id, category_id
         )
         -- Логирование переводов (от старой категории к новой на каждой карте)
         INSERT INTO transaction (card_id_from, category_id_from, card_id_to, category_id_to, amount, description)
-        SELECT tf.card_id, %(old_category_id)s, tf.card_id, tf.category_id, tf.transferred_amount, %(description)s
-        FROM transfer_funds tf;
+        SELECT tf.card_id, %(old_category_id)s, tf.card_id, tf.category_id, osd.amount, %(description)s
+        FROM transfer_funds tf
+        JOIN old_subcard_data osd ON osd.card_id = tf.card_id;
     """, params = {'old_category_id': old_category_id, 'new_category_id': new_category_id, 'description': description})
 
 #################################
