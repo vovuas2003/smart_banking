@@ -1016,12 +1016,10 @@ def transfer_money_to_existing_category(**kwargs):
 # API для работы с логами из БД #
 #################################
 
-# TODO: возвращать в человекочитаемом виде, возможно сразу в excel или сделать отдельную функцию save_to_file и бесплатно задублировать api, также дописать API для общего анализа (только суммарные зачисления + траты + переводы с/на)
-
 @try_return_none
 def get_all_transactions_by_card_id(card_id):
     """
-    Получает все транзакции по карте из логов.
+    Получает в человекочитаемом виде все транзакции по карте из логов, отсортированные по времени начиная с самых свежих.
     Аргумент: card_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
@@ -1040,46 +1038,105 @@ def get_all_transactions_by_card_id(card_id):
 @try_return_none
 def get_time_bound_transactions_by_card_id(**kwargs):
     """
-    Получает транзакции в заданном временном промежутке по карте из логов.
+    Получает в человекочитаемом виде транзакции в заданном временном промежутке по карте из логов, отсортированные по времени начиная с самых свежих.
     Аргументы: card_id, time_from, time_to (именованные).
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
     return DB.fetch_all("""
-        SELECT id, timestamptz, card_id_from, card_id_to, category_id_from, category_id_to, amount, description
-        FROM transaction
-        WHERE (card_id_from = %(card_id)s
-               OR card_id_to = %(card_id)s)
-          AND timestamptz BETWEEN %(time_from)s AND %(time_to)s;
+        SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
+        FROM transaction ts
+        JOIN card c_to ON c_to.id = ts.card_id_to
+        JOIN card c_from ON c_from.id = ts.card_id_from
+        JOIN category cat_to ON cat_to.id = ts.category_id_to
+        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        WHERE (ts.card_id_from = %(card_id)s
+                OR ts.card_id_to = %(card_id)s)
+                AND ts.timestamptz BETWEEN %(time_from)s AND %(time_to)s
+        ORDER BY ts.timestamptz DESC;
     """, params = kwargs)
+
+@try_return_none
+def get_last_n_transactions_by_card_id(card_id, n):
+    """
+    Получает в человекочитаемом виде последние n транзакциий по карте из логов, отсортированных по времени начиная с самых свежих.
+    Аргументы: card_id, n (от 1 до 1000 включительно).
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    if n <= 0 or n > 1000:
+        raise ValueError("invalid n")
+    return DB.fetch_all("""
+        SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
+        FROM transaction ts
+        JOIN card c_to ON c_to.id = ts.card_id_to
+        JOIN card c_from ON c_from.id = ts.card_id_from
+        JOIN category cat_to ON cat_to.id = ts.category_id_to
+        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        WHERE ts.card_id_from = %(card_id)s
+           OR ts.card_id_to = %(card_id)s
+        ORDER BY ts.timestamptz DESC
+        LIMIT %(n)s;
+    """, params = {'card_id': card_id, 'n': n})
 
 @try_return_none
 def get_all_transactions_by_category_id(category_id):
     """
-    Получает все транзакции по категории из логов.
+    Получает в человекочитаемом виде все транзакции по категории из логов, отсортированные по времени начиная с самых свежих.
     Аргумент: category_id.
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
     return DB.fetch_all("""
-        SELECT id, timestamptz, card_id_from, card_id_to, category_id_from, category_id_to, amount, description
-        FROM transaction
-        WHERE category_id_from = %(category_id)s
-           OR category_id_to = %(category_id)s;
+        SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
+        FROM transaction ts
+        JOIN card c_to ON c_to.id = ts.card_id_to
+        JOIN card c_from ON c_from.id = ts.card_id_from
+        JOIN category cat_to ON cat_to.id = ts.category_id_to
+        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        WHERE ts.category_id_from = %(category_id)s
+           OR ts.category_id_to = %(category_id)s
+        ORDER BY ts.timestamptz DESC;
     """, params = {'category_id': category_id})
 
 @try_return_none
 def get_time_bound_transactions_by_category_id(**kwargs):
     """
-    Получает транзакции в заданном временном промежутке по категории из логов.
+    Получает в человекочитаемом виде транзакции в заданном временном промежутке по категории из логов, отсортированные по времени начиная с самых свежих.
     Аргументы: category_id, time_from, time_to (именованные).
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
     return DB.fetch_all("""
-        SELECT id, timestamptz, card_id_from, card_id_to, category_id_from, category_id_to, amount, description
-        FROM transaction
-        WHERE (category_id_from = %(category_id)s
-               OR category_id_to = %(category_id)s)
-          AND timestamptz BETWEEN %(time_from)s AND %(time_to)s;
+        SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
+        FROM transaction ts
+        JOIN card c_to ON c_to.id = ts.card_id_to
+        JOIN card c_from ON c_from.id = ts.card_id_from
+        JOIN category cat_to ON cat_to.id = ts.category_id_to
+        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        WHERE (ts.category_id_from = %(category_id)s
+                OR ts.category_id_to = %(category_id)s)
+                AND ts.timestamptz BETWEEN %(time_from)s AND %(time_to)s
+        ORDER BY ts.timestamptz DESC;
     """, params = kwargs)
+
+@try_return_none
+def get_last_n_transactions_by_category_id(category_id, n):
+    """
+    Получает в человекочитаемом виде последние n транзакциий по категории из логов, отсортированных по времени начиная с самых свежих.
+    Аргумент: category_id, n (от 1 до 1000 включительно).
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    if n <= 0 or n > 1000:
+        raise ValueError("invalid n")
+    return DB.fetch_all("""
+        SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
+        FROM transaction ts
+        JOIN card c_to ON c_to.id = ts.card_id_to
+        JOIN card c_from ON c_from.id = ts.card_id_from
+        JOIN category cat_to ON cat_to.id = ts.category_id_to
+        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        WHERE ts.category_id_from = %(category_id)s
+           OR ts.category_id_to = %(category_id)s
+        ORDER BY ts.timestamptz DESC
+        LIMIT %(n)s;
+    """, params = {'category_id': category_id, 'n': n})
 
 ##################################
 # Вызов справки по всем функциям #
