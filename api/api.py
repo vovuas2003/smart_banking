@@ -1026,10 +1026,15 @@ def get_all_transactions_by_card_id(card_id):
     Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
     """
     return DB.fetch_all("""
-        SELECT id, timestamptz, card_id_from, card_id_to, category_id_from, category_id_to, amount, description
-        FROM transaction
-        WHERE card_id_from = %(card_id)s
-           OR card_id_to = %(card_id)s;
+        SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
+        FROM transaction ts
+        JOIN card c_to ON c_to.id = ts.card_id_to
+        JOIN card c_from ON c_from.id = ts.card_id_from
+        JOIN category cat_to ON cat_to.id = ts.category_id_to
+        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        WHERE ts.card_id_from = %(card_id)s
+           OR ts.card_id_to = %(card_id)s
+        ORDER BY ts.timestamptz DESC;
     """, params = {'card_id': card_id})
 
 @try_return_none
