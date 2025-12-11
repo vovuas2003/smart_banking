@@ -88,17 +88,25 @@ def get_user_by_login(login):
     """, params = {'login': login})
 
 @try_return_bool
-def change_user_by_id(**kwargs):
+def change_user_by_id(user_id, name = None, password = None):
     """
-    Меняет пароль и/или имя пользователя.
-    Аргументы: id, password, name (именованные).
+    Обновляет имя и/или пароль пользователя.
+    Аргумент: user_id.
+    Опциональные аргументы (при None не изменятся соответствующие поля): name, password.
     Возвращает True при успехе, иначе False.
     """
-    DB.execute("""
-        UPDATE "user"
-        SET password = %(password)s, name = %(name)s
-        WHERE id = %(id)s;
-    """, params = kwargs)
+    set_parts = []
+    params = {'id': user_id}
+    if name is not None:
+        set_parts.append("name = %(name)s")
+        params['name'] = name
+    if password is not None:
+        set_parts.append("password = %(password)s")
+        params['password'] = password
+    if not set_parts:
+        return
+    query = f"UPDATE \"user\" SET {', '.join(set_parts)} WHERE id = %(id)s;"
+    DB.execute(query, params = params)
 
 #################################
 # API для работы с картами в БД #
@@ -420,7 +428,6 @@ def delete_template_by_id(template_id):
 # API для работы с субкартами в БД #
 ####################################
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_none
 def add_subcard(**kwargs):
     """
@@ -542,7 +549,6 @@ def delete_subcard_by_id(subcard_id, description = None):
 # API для различных операций с деньгами #
 #########################################
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def inc_money_to_subcard(**kwargs):
     """
@@ -565,7 +571,6 @@ def inc_money_to_subcard(**kwargs):
         FROM updated;
     """, params = kwargs)
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def dec_money_from_subcard(**kwargs):
     """
@@ -589,7 +594,6 @@ def dec_money_from_subcard(**kwargs):
         FROM updated;
     """, params = kwargs)
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def transfer_money_between_subcards(**kwargs):
     """
@@ -640,7 +644,6 @@ def transfer_money_between_subcards(**kwargs):
         FROM from_subcard;
     """, params = kwargs)
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def apply_distribution_to_card(card_id, distributed_amounts, description = None):
     """
@@ -687,7 +690,6 @@ def apply_distribution_to_card(card_id, distributed_amounts, description = None)
         FROM inserted_or_updated_subcards i;
     """, params_seq = params_seq)
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def collect_category_money_on_one_card(**kwargs):
     """
@@ -752,7 +754,6 @@ def collect_category_money_on_one_card(**kwargs):
         WHERE ut.total_amount != 0;
     """, params = {'card_id': card_id, 'category_id': category_id, 'description': description})
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def delete_category_and_transfer_money_to_new(**kwargs):
     """
@@ -822,7 +823,6 @@ def delete_category_and_transfer_money_to_new(**kwargs):
         JOIN old_subcard_data osd ON osd.card_id = tf.card_id;
     """, params = {'old_category_id': old_category_id, 'new_category_name': new_category_name, 'new_category_description': new_category_description, 'description': description})
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def delete_category_and_transfer_money_to_existing(**kwargs):
     """
@@ -889,7 +889,6 @@ def delete_category_and_transfer_money_to_existing(**kwargs):
         JOIN old_subcard_data osd ON osd.card_id = tf.card_id;
     """, params = {'old_category_id': old_category_id, 'new_category_id': new_category_id, 'description': description})
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def transfer_money_to_new_category(**kwargs):
     """
@@ -952,7 +951,6 @@ def transfer_money_to_new_category(**kwargs):
         JOIN old_subcard_data osd ON osd.card_id = tf.card_id;
     """, params = {'old_category_id': old_category_id, 'new_category_name': new_category_name, 'new_category_description': new_category_description, 'description': description})
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def transfer_money_to_existing_category(**kwargs):
     """
@@ -1012,13 +1010,6 @@ def transfer_money_to_existing_category(**kwargs):
         JOIN old_subcard_data osd ON osd.card_id = tf.card_id;
     """, params = {'old_category_id': old_category_id, 'new_category_id': new_category_id, 'description': description})
 
-#####################################################################################################################################
-#####################################################################################################################################
-#####################################################################################################################################
-
-# TODO TODO TODO: протестировать копипасту
-
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def delete_card_and_transfer_money_to_new(**kwargs):
     """
@@ -1088,7 +1079,6 @@ def delete_card_and_transfer_money_to_new(**kwargs):
         JOIN old_subcard_data osd ON osd.category_id = tf.category_id;
     """, params = {'old_card_id': old_card_id, 'new_card_name': new_card_name, 'new_card_description': new_card_description, 'description': description})
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def delete_card_and_transfer_money_to_existing(**kwargs):
     """
@@ -1155,7 +1145,6 @@ def delete_card_and_transfer_money_to_existing(**kwargs):
         JOIN old_subcard_data osd ON osd.category_id = tf.category_id;
     """, params = {'old_card_id': old_card_id, 'new_card_id': new_card_id, 'description': description})
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def transfer_money_to_new_card(**kwargs):
     """
@@ -1218,7 +1207,6 @@ def transfer_money_to_new_card(**kwargs):
         JOIN old_subcard_data osd ON osd.category_id = tf.category_id;
     """, params = {'old_card_id': old_card_id, 'new_card_name': new_card_name, 'new_card_description': new_card_description, 'description': description})
 
-# TODO: подумать над проверкой активности / восстановлением карты и категории
 @try_return_bool
 def transfer_money_to_existing_card(**kwargs):
     """
@@ -1278,10 +1266,6 @@ def transfer_money_to_existing_card(**kwargs):
         JOIN old_subcard_data osd ON osd.category_id = tf.category_id;
     """, params = {'old_card_id': old_card_id, 'new_card_id': new_card_id, 'description': description})
 
-#####################################################################################################################################
-#####################################################################################################################################
-#####################################################################################################################################
-
 #################################
 # API для работы с логами из БД #
 #################################
@@ -1296,10 +1280,10 @@ def get_all_transactions_by_card_id(card_id):
     return DB.fetch_all("""
         SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
         FROM transaction ts
-        JOIN card c_to ON c_to.id = ts.card_id_to
-        JOIN card c_from ON c_from.id = ts.card_id_from
-        JOIN category cat_to ON cat_to.id = ts.category_id_to
-        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        LEFT JOIN card c_to ON c_to.id = ts.card_id_to
+        LEFT JOIN card c_from ON c_from.id = ts.card_id_from
+        LEFT JOIN category cat_to ON cat_to.id = ts.category_id_to
+        LEFT JOIN category cat_from ON cat_from.id = ts.category_id_from
         WHERE ts.card_id_from = %(card_id)s
            OR ts.card_id_to = %(card_id)s
         ORDER BY ts.timestamptz DESC;
@@ -1315,10 +1299,10 @@ def get_time_bound_transactions_by_card_id(**kwargs):
     return DB.fetch_all("""
         SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
         FROM transaction ts
-        JOIN card c_to ON c_to.id = ts.card_id_to
-        JOIN card c_from ON c_from.id = ts.card_id_from
-        JOIN category cat_to ON cat_to.id = ts.category_id_to
-        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        LEFT JOIN card c_to ON c_to.id = ts.card_id_to
+        LEFT JOIN card c_from ON c_from.id = ts.card_id_from
+        LEFT JOIN category cat_to ON cat_to.id = ts.category_id_to
+        LEFT JOIN category cat_from ON cat_from.id = ts.category_id_from
         WHERE (ts.card_id_from = %(card_id)s
                 OR ts.card_id_to = %(card_id)s)
                 AND ts.timestamptz BETWEEN %(time_from)s AND %(time_to)s
@@ -1337,10 +1321,10 @@ def get_last_n_transactions_by_card_id(card_id, n):
     return DB.fetch_all("""
         SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
         FROM transaction ts
-        JOIN card c_to ON c_to.id = ts.card_id_to
-        JOIN card c_from ON c_from.id = ts.card_id_from
-        JOIN category cat_to ON cat_to.id = ts.category_id_to
-        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        LEFT JOIN card c_to ON c_to.id = ts.card_id_to
+        LEFT JOIN card c_from ON c_from.id = ts.card_id_from
+        LEFT JOIN category cat_to ON cat_to.id = ts.category_id_to
+        LEFT JOIN category cat_from ON cat_from.id = ts.category_id_from
         WHERE ts.card_id_from = %(card_id)s
            OR ts.card_id_to = %(card_id)s
         ORDER BY ts.timestamptz DESC
@@ -1357,10 +1341,10 @@ def get_all_transactions_by_category_id(category_id):
     return DB.fetch_all("""
         SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
         FROM transaction ts
-        JOIN card c_to ON c_to.id = ts.card_id_to
-        JOIN card c_from ON c_from.id = ts.card_id_from
-        JOIN category cat_to ON cat_to.id = ts.category_id_to
-        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        LEFT JOIN card c_to ON c_to.id = ts.card_id_to
+        LEFT JOIN card c_from ON c_from.id = ts.card_id_from
+        LEFT JOIN category cat_to ON cat_to.id = ts.category_id_to
+        LEFT JOIN category cat_from ON cat_from.id = ts.category_id_from
         WHERE ts.category_id_from = %(category_id)s
            OR ts.category_id_to = %(category_id)s
         ORDER BY ts.timestamptz DESC;
@@ -1376,10 +1360,10 @@ def get_time_bound_transactions_by_category_id(**kwargs):
     return DB.fetch_all("""
         SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
         FROM transaction ts
-        JOIN card c_to ON c_to.id = ts.card_id_to
-        JOIN card c_from ON c_from.id = ts.card_id_from
-        JOIN category cat_to ON cat_to.id = ts.category_id_to
-        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        LEFT JOIN card c_to ON c_to.id = ts.card_id_to
+        LEFT JOIN card c_from ON c_from.id = ts.card_id_from
+        LEFT JOIN category cat_to ON cat_to.id = ts.category_id_to
+        LEFT JOIN category cat_from ON cat_from.id = ts.category_id_from
         WHERE (ts.category_id_from = %(category_id)s
                 OR ts.category_id_to = %(category_id)s)
                 AND ts.timestamptz BETWEEN %(time_from)s AND %(time_to)s
@@ -1398,10 +1382,10 @@ def get_last_n_transactions_by_category_id(category_id, n):
     return DB.fetch_all("""
         SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
         FROM transaction ts
-        JOIN card c_to ON c_to.id = ts.card_id_to
-        JOIN card c_from ON c_from.id = ts.card_id_from
-        JOIN category cat_to ON cat_to.id = ts.category_id_to
-        JOIN category cat_from ON cat_from.id = ts.category_id_from
+        LEFT JOIN card c_to ON c_to.id = ts.card_id_to
+        LEFT JOIN card c_from ON c_from.id = ts.card_id_from
+        LEFT JOIN category cat_to ON cat_to.id = ts.category_id_to
+        LEFT JOIN category cat_from ON cat_from.id = ts.category_id_from
         WHERE ts.category_id_from = %(category_id)s
            OR ts.category_id_to = %(category_id)s
         ORDER BY ts.timestamptz DESC
