@@ -4,8 +4,9 @@
 
 from dotenv import load_dotenv
 import os
+from pathlib import Path
 
-load_dotenv("python.env")
+load_dotenv(Path(__file__).parent / "python.env")
 
 def get_required_env(var_name):
     """
