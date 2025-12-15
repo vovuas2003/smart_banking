@@ -1,17 +1,41 @@
+##################################################
+# Загрузка переменных окружения для доступа к БД #
+##################################################
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv("python.env")
+
+def get_required_env(var_name):
+    """
+    Получение обязательных переменных окружения (если нет, выбрасывается исключение).
+    """
+    value = os.getenv(var_name)
+    if value is None:
+        raise ValueError(f"Required environment variable {var_name} is not set")
+    return value
+
+DSN = "postgresql://" + get_required_env('PYTHON_DML_USER') + ":" + get_required_env('PYTHON_DML_PASSWORD') \
+      + "@" + get_required_env('DB_HOST') + ":" + get_required_env('DB_PORT') + "/smart_banking"
+
 #########################
 # Класс для работы с БД #
 #########################
 
-# для вызова справки при запуске этого файла без подключения к базе
+# Подключаемся к БД только если импортируем этот файл
 if __name__ != "__main__":
     from .db import Database
 
     Database.configure(
-        dsn = "postgresql://smart_banking:smart_banking@localhost:5433/smart_banking",
+        dsn = DSN,
         minconn = 1,
         maxconn = 10,
     )
     DB = Database.instance()
+# Иначе при запуске этого файла убеждаемся в правильности строки для подключения к БД
+else:
+    print(DSN) # "postgresql://python_smart_banking_dml:python_smart_banking_dml@localhost:5433/smart_banking"
 
 ###################################
 # Декораторы для обработки ошибок #
@@ -27,7 +51,8 @@ def try_return_none(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except Exception:
+        except Exception as e:
+            print(f"Error in {func.__name__}: {e}")
             return None
     return wrapper
 
@@ -40,7 +65,8 @@ def try_return_bool(func):
         try:
             func(*args, **kwargs)
             return True
-        except Exception:
+        except Exception as e:
+            print(f"Error in {func.__name__}: {e}")
             return False
     return wrapper
 
@@ -137,6 +163,50 @@ def get_card_by_id(card_id):
         FROM card
         WHERE id = %(id)s;
     """, params = {'id': card_id})
+
+@try_return_none
+def get_cards_by_owner_id(owner_id, activity = None):
+    """
+    Получает карты пользователя
+    В зависимости от activity: True - активные, False - неактивные, None - все (по умолчанию).
+    Аргумент: owner_id.
+    Опциональный аргумент: activity.
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    return DB.fetch_all("""
+        SELECT id, owner_id, name, amount, is_active, description
+        FROM card
+        WHERE owner_id = %(owner_id)s
+          AND is_active IS COALESCE(%(activity)s, is_active)
+        ORDER BY id;
+    """, params = {'owner_id': owner_id, 'activity': activity})
+
+def get_user_cards(user_id, activity):
+    """
+    Получает карты пользователя (в зависимости от activity: True - активные, False - неактивные, иначе - все).
+    Аргументы: user_id, activity.
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    if activity is True:
+        return get_active_cards_by_owner_id(user_id)
+    elif activity is False:
+        return get_inactive_cards_by_owner_id(user_id)
+    else:
+        return get_all_cards_by_owner_id(user_id)
+
+@try_return_none
+def get_all_cards_by_owner_id(owner_id):
+    """
+    Получает все карты пользователя.
+    Аргумент: owner_id.
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    return DB.fetch_all("""
+        SELECT id, owner_id, name, amount, is_active, description
+        FROM card
+        WHERE owner_id = %(owner_id)s
+        ORDER BY id;
+    """, params = {'owner_id': owner_id})
 
 @try_return_none
 def get_active_cards_by_owner_id(owner_id):
@@ -261,6 +331,50 @@ def get_category_by_id(category_id):
         FROM category
         WHERE id = %(id)s;
     """, params = {'id': category_id})
+
+@try_return_none
+def get_categories_by_owner_id(owner_id, activity = None):
+    """
+    Получает категории пользователя
+    В зависимости от activity: True - активные, False - неактивные, None - все (по умолчанию).
+    Аргумент: owner_id.
+    Опциональный аргумент: activity.
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    return DB.fetch_all("""
+        SELECT id, owner_id, name, amount, is_active, description
+        FROM category
+        WHERE owner_id = %(owner_id)s
+          AND is_active IS COALESCE(%(activity)s, is_active)
+        ORDER BY id;
+    """, params = {'owner_id': owner_id, 'activity': activity})
+
+def get_user_categories(user_id, activity):
+    """
+    Получает категории пользователя (в зависимости от activity: True - активные, False - неактивные, иначе - все).
+    Аргументы: user_id, activity.
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    if activity is True:
+        return get_active_categories_by_owner_id(user_id)
+    elif activity is False:
+        return get_inactive_categories_by_owner_id(user_id)
+    else:
+        return get_all_categories_by_owner_id(user_id)
+
+@try_return_none
+def get_all_categories_by_owner_id(owner_id):
+    """
+    Получает все категории пользователя.
+    Аргумент: owner_id.
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    return DB.fetch_all("""
+        SELECT id, owner_id, name, amount, is_active, description
+        FROM category
+        WHERE owner_id = %(owner_id)s
+        ORDER BY id;
+    """, params = {'owner_id': owner_id})
 
 @try_return_none
 def get_active_categories_by_owner_id(owner_id):
@@ -1271,6 +1385,68 @@ def transfer_money_to_existing_card(**kwargs):
 #################################
 
 @try_return_none
+def get_transactions(card_id = None, category_id = None,
+                     time_from = None, include_time_from = False,
+                     time_to = None, include_time_to = False,
+                     limit = None, reverse = False):
+    """
+    Получает транзакции с гибкой фильтрацией по различным параметрам.
+    
+    Аргументы (обязательно указать хотя бы card_id или category_id, остальное опционально):
+    - card_id: фильтр по карте (None - не фильтровать)
+    - category_id: фильтр по категории (None - не фильтровать)
+    - time_from: начальная дата/время (None - не ограничивать снизу)
+    - include_time_from: включить точное время time_from (False - строго больше)
+    - time_to: конечная дата/время (None - не ограничивать сверху)
+    - include_time_to: включить точное время time_to (False - строго меньше)
+    - limit: ограничение количества записей (None - без ограничений, иначе можно указать от 1 до 1000)
+    - reverse: порядок сортировки по времени (False - от старых к новым)
+    
+    Возвращает список (возможно пустой) строк из БД (кортежей), None при ошибке.
+    """
+    if card_id is None and category_id is None:
+        raise ValueError("Должен быть указан card_id или category_id")
+    if limit is not None and (limit <= 0 or limit > 1000):
+        raise ValueError("limit должен быть от 1 до 1000 включительно")
+    query = """
+        SELECT ts.timestamptz, c_from.name, cat_from.name, c_to.name, cat_to.name, ts.amount, ts.description
+        FROM transaction ts
+        LEFT JOIN card c_to ON c_to.id = ts.card_id_to
+        LEFT JOIN card c_from ON c_from.id = ts.card_id_from
+        LEFT JOIN category cat_to ON cat_to.id = ts.category_id_to
+        LEFT JOIN category cat_from ON cat_from.id = ts.category_id_from
+        WHERE 1=1
+    """
+    params = {}
+    if card_id is not None:
+        query += " AND (ts.card_id_from = %(card_id)s OR ts.card_id_to = %(card_id)s)"
+        params['card_id'] = card_id
+    if category_id is not None:
+        query += " AND (ts.category_id_from = %(category_id)s OR ts.category_id_to = %(category_id)s)"
+        params['category_id'] = category_id
+    if time_from is not None:
+        if include_time_from:
+            query += " AND ts.timestamptz >= %(time_from)s"
+        else:
+            query += " AND ts.timestamptz > %(time_from)s"
+        params['time_from'] = time_from
+    if time_to is not None:
+        if include_time_to:
+            query += " AND ts.timestamptz <= %(time_to)s"
+        else:
+            query += " AND ts.timestamptz < %(time_to)s"
+        params['time_to'] = time_to
+    if reverse:
+        query += " ORDER BY ts.timestamptz DESC"
+    else:
+        query += " ORDER BY ts.timestamptz ASC"
+    if limit is not None:
+        query += " LIMIT %(limit)s"
+        params['limit'] = limit
+    query += ";"
+    return DB.fetch_all(query, params = params)
+
+@try_return_none
 def get_all_transactions_by_card_id(card_id):
     """
     Получает в человекочитаемом виде все транзакции по карте из логов, отсортированные по времени начиная с самых свежих.
@@ -1391,14 +1567,3 @@ def get_last_n_transactions_by_category_id(category_id, n):
         ORDER BY ts.timestamptz DESC
         LIMIT %(n)s;
     """, params = {'category_id': category_id, 'n': n})
-
-##################################
-# Вызов справки по всем функциям #
-##################################
-
-if __name__ == "__main__":
-    import inspect
-    for name, obj in list(globals().items()):
-        if inspect.isfunction(obj):
-            help(obj)
-
